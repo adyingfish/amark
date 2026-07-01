@@ -1,0 +1,1305 @@
+/* workspace.css - Phase 2 Workspace UI Styles */
+
+/* ── App Layout ───────────────────────────────────────────────────────────── */
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+.workspace-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--bg-color, #fff);
+  border-bottom: 1px solid var(--border-color, #e1e4e8);
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-color, #24292e);
+}
+
+.workspace-name {
+  font-weight: 600;
+}
+
+.workspace-actions button,
+.workspace-actions-left button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  /* Equal padding around the 16px icon → square hover target. */
+  padding: 4px;
+  border-radius: 4px;
+  color: var(--text-muted, #6a737d);
+}
+
+/* ── Icons ────────────────────────────────────────────────────────────────── */
+
+.lucide-icon {
+  display: block;
+  flex-shrink: 0;
+}
+
+.workspace-actions button:hover,
+.workspace-actions-left button:hover {
+  background: var(--hover-bg, #f3f4f6);
+}
+
+/* ── Custom Title Bar / Window Controls ───────────────────────────────────── */
+
+.workspace-header {
+  user-select: none;
+}
+
+.workspace-actions-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.workspace-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+/* ── Application Menu Bar ─────────────────────────────────────────────────── */
+
+.menu-bar {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.menu-button {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  background: transparent;
+  border: none;
+  cursor: default;
+  padding: 4px 10px;
+  border-radius: 4px;
+  color: var(--text-muted, #6a737d);
+}
+
+.menu-button:hover,
+.menu-button.open {
+  background: var(--hover-bg, #f3f4f6);
+  color: var(--text-color, #24292e);
+}
+
+.menu-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  z-index: 1000;
+  min-width: 200px;
+  padding: 4px;
+  background: var(--bg-color, #fff);
+  border: 1px solid var(--border-color, #e1e4e8);
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
+}
+
+.menu-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  width: 100%;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  background: transparent;
+  border: none;
+  cursor: default;
+  padding: 6px 10px;
+  border-radius: 4px;
+  color: var(--text-color, #24292e);
+}
+
+.menu-entry:hover {
+  background: var(--hover-bg, #f3f4f6);
+}
+
+.menu-entry-shortcut {
+  font-size: 10px;
+  color: var(--text-muted, #6a737d);
+}
+
+.menu-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border-color, #e1e4e8);
+}
+
+.window-controls {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+}
+
+.window-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-muted, #6a737d);
+}
+
+.window-control:hover {
+  background: var(--hover-bg, #f3f4f6);
+  color: var(--text-color, #24292e);
+}
+
+/* Scoped under `.workspace-actions` so it outranks `.workspace-actions
+   button:hover`, which would otherwise paint the close button grey. */
+.workspace-actions .window-control-close:hover {
+  background: #e81123;
+  color: #fff;
+}
+
+/* ── Editor View Mode Switch ──────────────────────────────────────────────────
+   Lives in the title-bar actions. The buttons inherit base sizing/hover from
+   `.workspace-actions button`; only grouping and the selected state are added. */
+
+.view-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+  margin-right: 4px;
+}
+
+.view-mode-switch .view-mode-btn.active {
+  background: var(--active-bg, #0000000d);
+  color: var(--active-text, #1f1f1f);
+}
+
+.main-container {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Sidebar ──────────────────────────────────────────────────────────────── */
+
+.sidebar {
+  /* Width is driven by the sidebar resizer via this CSS variable; min/max here
+     enforce the usable range even if the persisted value drifts. */
+  width: var(--sidebar-width, 240px);
+  min-width: 200px;
+  max-width: 400px;
+  flex-shrink: 0;
+  background: var(--sidebar-bg, #f6f8fa);
+  border-right: 1px solid var(--border-color, #e1e4e8);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition:
+    width 0.18s ease,
+    min-width 0.18s ease,
+    border-right-width 0.18s ease;
+}
+
+/* While dragging the resizer the sidebar must track the pointer 1:1, with no
+   easing fighting the per-frame width updates. */
+.sidebar.resizing {
+  transition: none;
+}
+
+.sidebar.collapsed {
+  width: 0;
+  min-width: 0;
+  border-right-width: 0;
+}
+
+/* ── Sidebar resizer ──────────────────────────────────────────────────────── */
+
+/* A slim grab zone that sits flush over the sidebar's right border. At rest its
+   thin centered line matches that border colour so it reads as the border (not
+   as the always-visible split divider); on hover or drag it turns to the accent
+   colour rather than thickening into a bar. */
+.sidebar-resizer {
+  /* A 4px grab zone that straddles the sidebar/editor boundary. The symmetric
+     negative margins make it consume 0 layout width, so it overlays the seam
+     instead of pushing the editor area aside (which would expose a strip of
+     editor background between the handle and the tabs bar). */
+  flex: 0 0 4px;
+  margin-left: -2px;
+  margin-right: -2px;
+  position: relative;
+  cursor: col-resize;
+  background: transparent;
+  touch-action: none;
+  user-select: none;
+  z-index: 5;
+}
+
+.sidebar-resizer::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--border-color, #e1e4e8);
+}
+
+.sidebar-resizer:hover::after,
+.sidebar-resizer.dragging::after {
+  background: var(--primary-color, #0969da);
+}
+
+/* No handle to grab when the sidebar is collapsed. */
+.sidebar.collapsed + .sidebar-resizer {
+  display: none;
+}
+
+.workspace-actions button.active {
+  color: var(--text-color, #24292e);
+  background: var(--hover-bg, #f3f4f6);
+}
+
+.sidebar-header {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-muted, #6a737d);
+  border-bottom: 1px solid var(--border-color, #e1e4e8);
+}
+
+.file-tree-container {
+  flex: 1;
+  overflow: auto;
+  overscroll-behavior: none;
+  padding: 8px 0;
+}
+
+.activity-panel {
+  flex-shrink: 0;
+  max-height: 180px;
+  overflow: hidden;
+  border-top: 1px solid var(--border-color, #e1e4e8);
+  background: var(--sidebar-bg, #f6f8fa);
+}
+
+.activity-panel-header {
+  padding: 10px 16px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted, #6a737d);
+}
+
+.activity-list {
+  max-height: 136px;
+  overflow-y: auto;
+  overscroll-behavior: none;
+  padding: 0 8px 8px;
+}
+
+.activity-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-color, #24292e);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.activity-item:hover {
+  background: var(--hover-bg, #e1e4e8);
+}
+
+.activity-file-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.activity-time {
+  flex-shrink: 0;
+  color: var(--text-muted, #6a737d);
+  font-size: 12px;
+}
+
+.activity-empty {
+  padding: 0 16px 14px;
+  color: var(--text-muted, #6a737d);
+  font-size: 14px;
+}
+
+.workspace-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-muted, #6a737d);
+}
+
+.workspace-empty button {
+  margin-top: 12px;
+  padding: 6px 12px;
+  background: var(--primary-color, #0969da);
+  color: var(--primary-on-color, white);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.workspace-empty button:hover {
+  opacity: 0.9;
+}
+
+/* ── File Tree ─────────────────────────────────────────────────────────────── */
+
+.workspace-tree {
+  font-size: 14px;
+}
+
+.workspace-tree-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.workspace-tree-item {
+  margin: 0;
+}
+
+.workspace-tree-folder,
+.workspace-tree-file {
+  display: flex;
+  align-items: center;
+  padding: 4px 12px 4px 8px;
+  cursor: pointer;
+  user-select: none;
+  gap: 4px;
+}
+
+.workspace-tree-file {
+  padding-left: 28px; /* 8px base + 16px toggle + 4px gap — aligns file icon with folder icon */
+}
+
+.workspace-tree-folder:hover,
+.workspace-tree-file:hover {
+  background: var(--hover-bg, #e1e4e8);
+}
+
+.workspace-tree-file.active {
+  background: var(--active-bg, #0969da);
+  color: var(--active-text, white);
+}
+
+.workspace-tree-toggle {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--text-muted, #6a737d);
+  cursor: pointer;
+}
+
+.workspace-tree-folder-icon,
+.workspace-tree-file-icon {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 4px;
+  color: var(--text-muted, #6a737d);
+}
+
+.workspace-tree-file.active .workspace-tree-file-icon {
+  color: inherit;
+}
+
+.workspace-tree-folder-name,
+.workspace-tree-file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-tree-children {
+  list-style: none;
+  padding-left: 16px;
+  margin: 0;
+}
+
+.workspace-tree-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-muted, #6a737d);
+  font-size: 14px;
+}
+
+/* ── Editor Area ──────────────────────────────────────────────────────────── */
+
+.editor-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-color, #fff);
+}
+
+.tabs-bar-container {
+  flex-shrink: 0;
+}
+
+.tabs-bar {
+  /* Height reserved at the top for the (flipped) horizontal scrollbar. */
+  --tabs-scrollbar-h: 5px;
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  height: 40px;
+  background: var(--sidebar-bg, #f6f8fa);
+  border-bottom: 1px solid var(--border-color, #e1e4e8);
+  overflow: hidden;
+}
+
+/*
+ * Horizontal scroller. The scrollbar is flipped to the visual top via
+ * scaleY(-1) (the inner list is flipped back so it reads normally), and
+ * `overflow-x: scroll` keeps the gutter reserved at all times so the bar's
+ * height never shifts when content starts/stops overflowing.
+ */
+.tabs-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow-x: scroll;
+  overflow-y: hidden;
+  transform: scaleY(-1);
+}
+
+.tabs-scroll::-webkit-scrollbar {
+  height: var(--tabs-scrollbar-h, 5px);
+}
+
+/* The reserved strip sits above the tabs, so match the inactive tab colour. */
+.tabs-scroll::-webkit-scrollbar-track {
+  background: var(--sidebar-bg, #f6f8fa);
+}
+
+.tabs-scroll::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 4px;
+}
+
+/* When a scrollbar exists, reveal its thumb whenever the tab bar is hovered. */
+.tabs-bar.has-overflow:hover .tabs-scroll::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb, rgba(128, 128, 128, 0.55));
+}
+
+.tabs-bar.has-overflow:hover .tabs-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover, rgba(128, 128, 128, 0.8));
+}
+
+.tabs-list {
+  display: flex;
+  height: 100%;
+  transform: scaleY(-1);
+}
+
+.tab {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  height: 100%;
+  min-width: 120px;
+  max-width: 200px;
+  /* Unselected tabs always match the directory tree area, regardless of theme. */
+  background: var(--sidebar-bg, #f6f8fa);
+  border-right: 1px solid var(--border-color, #d1d5da);
+  cursor: pointer;
+  font-size: 14px;
+  user-select: none;
+  touch-action: none;
+  transition: background 0.15s ease;
+}
+
+.tab:hover {
+  background: var(--tab-hover-bg, #d1d5da);
+}
+
+.tab.active {
+  background: var(--bg-color, #fff);
+  border-bottom: 2px solid var(--primary-color, #0969da);
+}
+
+.tab.dragging {
+  z-index: 5;
+  cursor: grabbing;
+  background: var(--bg-color, #fff);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
+}
+
+/* While reordering, suppress hover/background transitions for a crisp slide. */
+.tabs-list.reordering .tab {
+  transition: transform 0.18s ease;
+}
+
+.tab.dirty .tab-indicator {
+  background: var(--warning-color, #f59e0b);
+}
+
+.tab-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: transparent;
+  flex-shrink: 0;
+}
+
+.tab-close {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  opacity: 0.6;
+}
+
+.tab-close:hover {
+  background: var(--hover-bg, #d1d5da);
+  opacity: 1;
+}
+
+/* ── New file button ───────────────────────────────────────────────────────── */
+
+.tabs-new-file {
+  align-self: flex-end;
+  height: calc(100% - var(--tabs-scrollbar-h, 5px));
+  aspect-ratio: 1;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: var(--sidebar-bg, #f6f8fa);
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.tabs-new-file:hover {
+  background: var(--hover-bg, #ececea);
+  opacity: 1;
+}
+
+/* Pinned copy, kept next to the overflow chevron so it stays reachable once
+   tabs overflow and the inline copy (appended after the last tab) scrolls
+   out of view. */
+.tabs-new-file-pinned {
+  display: none;
+}
+
+.tabs-bar.has-overflow .tabs-new-file-pinned {
+  display: flex;
+}
+
+/* Once pinned, the inline copy after the last tab would be a redundant
+   second "+" whenever scrolling brings it back into view. */
+.tabs-bar.has-overflow .tabs-new-file-inline {
+  display: none;
+}
+
+.tabs-bar-empty {
+  align-items: stretch;
+}
+
+/* ── Overflow menu (hidden tabs) ───────────────────────────────────────────── */
+
+.tabs-overflow {
+  /* Bottom-aligned and shortened by the reserved scrollbar strip so the button
+     (and its hover highlight) line up with the tabs, not the full bar height. */
+  align-self: flex-end;
+  height: calc(100% - var(--tabs-scrollbar-h, 5px));
+  /* Square: width follows the tab-matched height, so the hover highlight is a
+     square with the icon centred in it. */
+  aspect-ratio: 1;
+  position: relative;
+  display: none;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: var(--sidebar-bg, #f6f8fa);
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+/* Fade the scrolling tabs into the button instead of a hard divider line. */
+.tabs-overflow::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -24px;
+  width: 24px;
+  background: linear-gradient(to right, transparent, var(--sidebar-bg, #f6f8fa));
+  pointer-events: none;
+}
+
+.tabs-bar.has-overflow .tabs-overflow {
+  display: flex;
+}
+
+.tabs-overflow:hover {
+  background: var(--hover-bg, #ececea);
+  opacity: 1;
+}
+
+.tabs-overflow-menu {
+  position: fixed;
+  z-index: 200;
+  min-width: 180px;
+  max-width: 280px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--sidebar-bg, #f6f8fa);
+  border: 1px solid var(--border-color, #d1d5da);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+
+.tabs-overflow-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tabs-overflow-item:hover {
+  background: var(--tab-hover-bg, #d1d5da);
+}
+
+.tabs-overflow-item.active {
+  font-weight: 600;
+}
+
+.tabs-overflow-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tabs-overflow-dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.tabs-overflow-item.dirty .tabs-overflow-dot {
+  background: var(--warning-color, #f59e0b);
+}
+
+.tabs-overflow-empty {
+  padding: 8px 10px;
+  font-size: 13px;
+  opacity: 0.6;
+}
+
+/* ── Tab context menu ─────────────────────────────────────────────────────── */
+
+.tab-context-menu {
+  position: fixed;
+  z-index: 200;
+  min-width: 160px;
+  padding: 4px;
+  background: var(--sidebar-bg, #f6f8fa);
+  border: 1px solid var(--border-color, #d1d5da);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+
+.tab-context-item {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tab-context-item:hover:not(:disabled) {
+  background: var(--tab-hover-bg, #d1d5da);
+}
+
+.tab-context-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ── File-tree context menu ───────────────────────────────────────────────── */
+
+.tree-context-menu {
+  position: fixed;
+  z-index: 200;
+  min-width: 168px;
+  padding: 4px;
+  background: var(--sidebar-bg, #f6f8fa);
+  border: 1px solid var(--border-color, #d1d5da);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+
+.tree-context-item {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tree-context-item:hover {
+  background: var(--tab-hover-bg, #d1d5da);
+}
+
+.tree-context-item.danger {
+  color: var(--danger-color, #cf222e);
+}
+
+.tree-context-item.danger:hover {
+  background: var(--danger-color, #cf222e);
+  color: #fff;
+}
+
+/* ── Modal dialog (prompt / confirm) ──────────────────────────────────────── */
+
+.app-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.app-dialog {
+  width: min(360px, calc(100vw - 48px));
+  padding: 16px;
+  background: var(--sidebar-bg, #f6f8fa);
+  color: var(--text-color, #24292f);
+  border: 1px solid var(--border-color, #d1d5da);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+}
+
+.app-dialog-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.app-dialog-message {
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+
+.app-dialog-input {
+  width: 100%;
+  padding: 6px 8px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: inherit;
+  background: var(--editor-bg, #fff);
+  border: 1px solid var(--border-color, #d1d5da);
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.app-dialog-input:focus {
+  outline: none;
+  border-color: var(--active-bg, #0969da);
+}
+
+.app-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.app-dialog-btn {
+  padding: 5px 14px;
+  font-size: 13px;
+  border: 1px solid var(--border-color, #d1d5da);
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.app-dialog-btn:hover {
+  background: var(--tab-hover-bg, #d1d5da);
+}
+
+.app-dialog-btn.primary {
+  background: var(--active-bg, #0969da);
+  border-color: var(--active-bg, #0969da);
+  color: #fff;
+}
+
+.app-dialog-btn.primary:hover {
+  filter: brightness(1.05);
+}
+
+.app-dialog-btn.danger {
+  background: var(--danger-color, #cf222e);
+  border-color: var(--danger-color, #cf222e);
+  color: #fff;
+}
+
+.app-dialog-btn.danger:hover {
+  filter: brightness(1.05);
+}
+
+/* ── Editor Wrapper ───────────────────────────────────────────────────────── */
+
+.editor-wrapper {
+  flex: 1;
+  overflow: auto;
+  overscroll-behavior: none;
+  position: relative;
+}
+
+.external-update-banner {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border-color, #e1e4e8);
+  background: var(--external-update-bg, #fff8c5);
+  color: var(--external-update-text, #5f4b00);
+  font-size: 14px;
+}
+
+.external-update-banner.visible {
+  display: flex;
+}
+
+.external-update-banner.danger {
+  background: var(--danger-bg, #ffebe9);
+  color: var(--danger-text, #82071e);
+}
+
+.banner-action {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.banner-action:hover {
+  opacity: 0.8;
+}
+
+/* ── Toast ────────────────────────────────────────────────────────────────── */
+
+.toast-host {
+  position: fixed;
+  right: 16px;
+  bottom: 40px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  pointer-events: none;
+}
+
+.toast {
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
+.toast.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast-success {
+  background: var(--success-bg, #dafbe1);
+  color: var(--success-text, #1a7f37);
+}
+
+.toast-error {
+  background: var(--danger-bg, #ffebe9);
+  color: var(--danger-text, #82071e);
+}
+
+.editor-host {
+  height: 100%;
+}
+
+/* ── Editor View Modes (源代码 / 预览 / 分屏) ──────────────────────────────────
+   The editor area hosts two surfaces over the same document: the raw-source
+   textarea and the Milkdown rich view. A `mode-*` class on `.editor-wrapper`
+   decides which are visible; `.no-document` overrides everything to show the
+   empty state. */
+
+.editor-panes {
+  height: 100%;
+}
+
+/* Whichever surface actually scrolls in a given mode — .editor-wrapper itself
+   in 可视化编辑/仅预览, .source-view in 源代码, and .source-view + #editor
+   independently in 分屏 — must render the same scrollbar width. This pins it
+   explicitly instead of relying on the global ::-webkit-scrollbar rule, so
+   the two split panes can never drift from each other or from the other
+   three modes. */
+.editor-wrapper::-webkit-scrollbar,
+.source-view::-webkit-scrollbar,
+#editor::-webkit-scrollbar {
+  width: 6px;
+}
+
+.source-view {
+  display: none;
+  width: 100%;
+  height: 100%;
+  /* Match the rich preview's text column: the ProseMirror surface caps at
+     --editor-content-width inside #editor's 40px side gutters. Mirror that
+     here by capping the textarea at content-width + the two 40px paddings
+     and centering it, so the source and preview content columns line up at
+     every window width. */
+  max-width: calc(var(--editor-content-width) + 80px);
+  margin: 0 auto;
+  border: none;
+  outline: none;
+  resize: none;
+  background: var(--bg-color, #fff);
+  color: var(--text-color, #24292e);
+  font-family: var(--editor-font-family);
+  font-size: 14px;
+  line-height: 1.7;
+  padding: 16px 40px 40px;
+  tab-size: 2;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  overflow: auto;
+  overscroll-behavior: none;
+}
+
+/* 可视化编辑 (WYSIWYG) and 仅预览 (read-only): rich editor only. Both share the
+   same surface; the editable flag (set in App.applyViewMode) is what
+   distinguishes them, not the layout. */
+.editor-wrapper.mode-wysiwyg .source-view,
+.editor-wrapper.mode-preview-only .source-view {
+  display: none;
+}
+.editor-wrapper.mode-wysiwyg #editor,
+.editor-wrapper.mode-preview-only #editor {
+  display: block;
+}
+
+/* Source: raw textarea only, rich editor stays mounted but hidden. */
+.editor-wrapper.mode-source #editor {
+  display: none;
+}
+.editor-wrapper.mode-source .source-view {
+  display: block;
+}
+
+/* The draggable bar between the two split panes. Hidden outside split mode;
+   shown as a flex item between the textarea and the rich editor. `--split-ratio`
+   (set by setupSplitDivider) is the source pane's fraction of the row. */
+.split-divider {
+  display: none;
+  flex: 0 0 6px;
+  cursor: col-resize;
+  background: var(--border-color, #e1e4e8);
+  /* Pointer events must reach the bar even mid-drag over a neighbour. */
+  touch-action: none;
+  user-select: none;
+}
+.split-divider:hover,
+.split-divider.dragging {
+  background: var(--primary-color, #0969da);
+}
+
+/* Split: raw-source textarea (left) and the read-only 仅预览 render (right),
+   each scrolling on its own. */
+.editor-wrapper.mode-split {
+  overflow: hidden;
+}
+.editor-wrapper.mode-split:not(.no-document) .editor-panes {
+  display: flex;
+  flex-direction: row;
+}
+.editor-wrapper.mode-split:not(.no-document) .split-divider {
+  display: block;
+}
+.editor-wrapper.mode-split:not(.no-document) .editor-panes > .source-view {
+  display: block;
+  flex: 0 0 calc(var(--split-ratio, 0.5) * 100%);
+  min-width: 0;
+  height: 100%;
+  /* Fill the pane edge-to-edge so the divider sits flush; the centered max-width
+     from the base rule only applies in full-width source mode. */
+  max-width: none;
+  margin: 0;
+}
+.editor-wrapper.mode-split:not(.no-document) .editor-panes > #editor {
+  display: block;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  /* The wrapper clips in split mode, so each pane owns its own scroll. */
+  overflow: auto;
+  overscroll-behavior: none;
+  padding: 0 24px 24px;
+}
+
+/* No active document: panes give way to the empty state overlay. */
+.editor-wrapper.no-document .editor-panes {
+  display: none;
+}
+
+.empty-state {
+  position: absolute;
+  inset: 0;
+  display: none;
+  background: var(--bg-color, #fff);
+}
+
+.editor-wrapper.no-document .empty-state {
+  display: block;
+}
+
+/* ── Status Bar ───────────────────────────────────────────────────────────── */
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 16px;
+  background: var(--status-bg, #f6f8fa);
+  border-top: 1px solid var(--border-color, #e1e4e8);
+  font-size: 14px;
+  color: var(--text-muted, #6a737d);
+}
+
+.status-left,
+.status-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.status-left {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-status {
+  flex-shrink: 0;
+}
+
+.agent-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  transition: background 0.3s ease;
+}
+
+.agent-dot.active {
+  background: #ef4444;
+  animation: pulse 1s infinite;
+}
+
+.agent-dot.cooldown {
+  background: #f59e0b;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* ── Workspace Theme Variables ────────────────────────────────────────────────
+   The sidebar / tabs / status bar use these workspace-specific variables.
+   Theme switching is driven by body classes (see theme-manager.ts + base.css),
+   so they must be defined per theme class — not via a [data-theme] attribute.
+   Base variables (--bg-color, --text-color, --border-color, --text-muted) come
+   from base.css; the variables below are the workspace-chrome additions. */
+
+/* Light is the default (also covers theme-light and unknown/custom themes). */
+body,
+body.theme-light {
+  --sidebar-bg: #f3f3f0; /* 侧栏底 */
+  --tabs-bg: #f3f3f0; /* 标签栏底 */
+  --tab-bg: #e9e9e6; /* 标签底：比激活标签(--bg-color #f7f7f5)更暗，未选中时下沉 */
+  --tab-hover-bg: #e0e0dc; /* 标签悬停：再暗一档作为反馈 */
+  --hover-bg: #ececea; /* 通用悬停 */
+
+  --active-bg: #0000000d; /* 激活项：黑色 5% 透明 */
+  --active-text: #1f1f1f; /* 激活文字：保持正文色不变 */
+  --status-bg: #f3f3f0; /* 状态栏底 */
+
+  --primary-color: #111111; /* 主强调色：近黑 */
+  --primary-on-color: #ffffff; /* 主强调色之上的文字色：白 */
+
+  --warning-color: #b7791f; /* 警告 */
+  --external-update-bg: #fff4d6; /* 外部更新提示底 */
+  --external-update-text: #6b4e00; /* 外部更新提示文字 */
+
+  --danger-bg: #fdecec; /* 危险提示底 */
+  --danger-text: #9b1c1c; /* 危险提示文字 */
+}
+
+body.theme-dark {
+  --sidebar-bg: #171717; /* 侧栏底 */
+  --tabs-bg: #171717; /* 标签栏底 */
+  --tab-bg: #212121; /* 标签底 */
+  --tab-hover-bg: #2f2f2f; /* 标签悬停 */
+  --hover-bg: #2f2f2f; /* 通用悬停 */
+
+  --active-bg: #ffffff1a; /* 激活项：白色 10% 透明 */
+  --active-text: #ececec; /* 激活文字：保持正文色不变 */
+  --status-bg: #171717; /* 状态栏底 */
+
+  --primary-color: #f4f4f4; /* 主强调色：近白 */
+  --primary-on-color: #171717; /* 主强调色之上的文字色：近黑，与近白底色保持对比 */
+
+  --warning-color: #d9a441; /* 警告 */
+  --external-update-bg: #3a321f; /* 外部更新提示底 */
+  --external-update-text: #f0d58c; /* 外部更新提示文字 */
+
+  --danger-bg: #3a2323; /* 危险提示底 */
+  --danger-text: #f2a6a6; /* 危险提示文字 */
+}
+
+body.theme-literary {
+  --sidebar-bg: #f4f3ee; /* 侧栏底 */
+  --tabs-bg: #e8e6dc; /* 标签栏底 */
+  --tab-bg: #f4f3ee; /* 标签底 */
+  --tab-hover-bg: #edeae3; /* 标签悬停 */
+  --hover-bg: #e8e6dc; /* 通用悬停 */
+
+  --active-bg: #c15f3c; /* 激活项：深陶土橙 */
+  --active-text: #ffffff; /* 激活文字：白字 */
+  --status-bg: #f4f3ee; /* 状态栏底 */
+
+  --primary-color: #d97757; /* 主强调色：Claude orange */
+  --primary-on-color: #ffffff; /* 主强调色之上的文字色：白 */
+
+  --warning-color: #b8872f; /* 警告：低饱和琥珀 */
+  --external-update-bg: #f5ead2; /* 外部更新提示底 */
+  --external-update-text: #6f5412; /* 外部更新提示文字 */
+
+  --danger-bg: #f5e1db; /* 危险提示底 */
+  --danger-text: #8a2b1a; /* 危险提示文字 */
+}
+
+body.theme-newsprint {
+  --sidebar-bg: #f3f2ee; /* 侧栏底 */
+  --tabs-bg: #f3f2ee; /* 标签栏底 */
+  --tab-bg: #e8e7df; /* 标签底 / 菜单 hover */
+  --tab-hover-bg: #dadada; /* 标签悬停 */
+  --hover-bg: #e8e7df; /* 通用悬停 */
+
+  --active-bg: rgba(32, 43, 51, 0.63); /* 激活项：深灰蓝墨色 */
+  --active-text: #ffffff; /* 激活文字 */
+
+  --status-bg: #f3f2ee; /* 状态栏底 */
+  --primary-color: #065588; /* 主强调色：链接蓝 */
+  --primary-on-color: #ffffff; /* 主强调色之上的文字色：白 */
+
+  --warning-color: #9b5146; /* 警告 / 图片 meta 的砖红色 */
+  --external-update-bg: #e8e7df; /* 外部更新提示底 */
+  --external-update-text: #444444; /* 外部更新提示文字 */
+
+  --danger-bg: #eadad6; /* 危险提示底：按 Newsprint 暖灰扩展 */
+  --danger-text: #9b5146; /* 危险提示文字 */
+}
