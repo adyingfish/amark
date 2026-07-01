@@ -1,0 +1,14 @@
+pre-commit:
+  jobs:
+    - name: staged-checks
+      run: vp staged
+    - name: rustfmt-staged
+      glob: "src-tauri/**/*.rs"
+      run: rustfmt --edition 2021 {staged_files}
+
+pre-push:
+  commands:
+    repo-check:
+      run: vp check
+    cargo-check:
+      run: cargo check --manifest-path src-tauri/Cargo.toml

@@ -6,6 +6,9 @@ import tailwindcss from "@tailwindcss/vite";
 // https://tauri.app/reference/config/#devurl
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  staged: {
+    "**/*.{css,html,js,json,jsx,md,mdx,ts,tsx,yaml,yml}": "vp check --fix",
+  },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
