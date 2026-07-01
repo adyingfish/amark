@@ -1,0 +1,532 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  font-family:
+    "HarmonyOS Sans SC",
+    "HarmonyOS Sans",
+    "Segoe UI",
+    "Microsoft YaHei",
+    -apple-system,
+    BlinkMacSystemFont,
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Noto Sans",
+    "Noto Sans CJK SC",
+    "WenQuanYi Micro Hei",
+    system-ui,
+    sans-serif;
+  /* Body font for the rich preview and the raw-source view. Themes override
+     this so both editing surfaces share one font; UI chrome keeps the stack
+     above. */
+  --editor-font-family:
+    "HarmonyOS Sans SC", "HarmonyOS Sans", "Segoe UI", "Microsoft YaHei", -apple-system,
+    BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Noto Sans", "Noto Sans CJK SC",
+    "WenQuanYi Micro Hei", system-ui, sans-serif;
+  /* Single source of truth for the text column width shared by every view
+     mode (WYSIWYG, source, preview-only). Keeping it on one variable means
+     the three surfaces can never drift apart again. */
+  --editor-content-width: 780px;
+  background: var(--bg-color);
+  color: var(--text-color);
+}
+
+#editor {
+  height: 100%;
+  padding: 0 40px 40px;
+}
+
+#editor .ProseMirror {
+  outline: none;
+  max-width: var(--editor-content-width);
+  margin: 0 auto;
+  min-height: 100%;
+  font-family: var(--editor-font-family);
+  font-size: 16px;
+  line-height: 1.75;
+  color: var(--text-color);
+  /* 段落断行改用更优的启发式：消除段尾孤字、整理右边缘。继承给正文/列表/
+     引用等子元素，标题另用 balance 覆盖。不支持的内核（如较旧 WebKitGTK）
+     忽略该值并退回普通贪心换行，无副作用。若编辑时段尾抖动明显，可改为
+     text-wrap: stable。 */
+  text-wrap: pretty;
+}
+
+#editor .ProseMirror > * + * {
+  margin-top: 0.75em;
+}
+
+/* Typography */
+#editor .ProseMirror h1 {
+  font-size: 2em;
+  font-weight: 700;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  line-height: 1.25;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border-color);
+}
+
+#editor .ProseMirror h2 {
+  font-size: 1.5em;
+  font-weight: 600;
+  margin-top: 1.25em;
+  margin-bottom: 0.5em;
+  line-height: 1.3;
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid var(--border-color);
+}
+
+#editor .ProseMirror h3 {
+  font-size: 1.25em;
+  font-weight: 600;
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+}
+
+#editor .ProseMirror h4,
+#editor .ProseMirror h5,
+#editor .ProseMirror h6 {
+  font-weight: 600;
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+}
+
+/* 标题折行时让各行长度更均衡（仅对折成多行的标题有效，单行标题无副作用）。 */
+#editor .ProseMirror h1,
+#editor .ProseMirror h2,
+#editor .ProseMirror h3,
+#editor .ProseMirror h4,
+#editor .ProseMirror h5,
+#editor .ProseMirror h6 {
+  text-wrap: balance;
+}
+
+#editor .ProseMirror p {
+  margin: 0.5em 0;
+}
+
+#editor .ProseMirror a {
+  color: var(--link-color);
+  text-decoration: none;
+}
+
+#editor .ProseMirror a:hover {
+  text-decoration: underline;
+}
+
+/* While Ctrl/Cmd is held, links in either view read as clickable: a pointer
+   cursor signals Ctrl+click-to-open (see App.handle*LinkClick). */
+.editor-wrapper.link-modifier-active #editor .ProseMirror a {
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.editor-wrapper.link-modifier-active .source-view {
+  cursor: pointer;
+}
+
+#editor .ProseMirror strong {
+  font-weight: 600;
+}
+
+/* Code */
+#editor .ProseMirror code {
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 0.875em;
+  font-family: "SF Mono", "Fira Code", Menlo, monospace;
+}
+
+#editor .ProseMirror pre {
+  background: var(--code-block-bg);
+  color: var(--code-block-text, var(--text-color));
+  padding: 16px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 1em 0;
+}
+
+#editor .ProseMirror pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.875em;
+  line-height: 1.6;
+}
+
+/* Blockquote */
+#editor .ProseMirror blockquote {
+  border-left: 4px solid var(--blockquote-border);
+  padding-left: 16px;
+  margin: 1em 0;
+  color: var(--text-muted);
+}
+
+/* Lists */
+/* Tailwind Preflight 全局执行 `ul, ol { list-style: none }`，会清掉编辑器里的
+   列表标记，因此这里必须显式重新声明 list-style-type 才能恢复圆点/序号。 */
+#editor .ProseMirror ul,
+#editor .ProseMirror ol {
+  padding-left: 24px;
+  margin: 0.5em 0;
+}
+
+#editor .ProseMirror ul {
+  list-style-type: disc;
+}
+
+#editor .ProseMirror ul ul {
+  list-style-type: circle;
+}
+
+#editor .ProseMirror ul ul ul {
+  list-style-type: square;
+}
+
+#editor .ProseMirror ol {
+  list-style-type: decimal;
+}
+
+#editor .ProseMirror li {
+  margin: 0.25em 0;
+}
+
+/* GFM 任务列表项自带复选框，不应再显示圆点标记 */
+#editor .ProseMirror li[data-item-type="task"] {
+  position: relative;
+  list-style: none;
+  padding-left: 1.55em;
+}
+
+#editor .ProseMirror li[data-item-type="task"]::before {
+  content: "";
+  position: absolute;
+  top: 0.42em;
+  left: 0;
+  width: 0.95em;
+  height: 0.95em;
+  border: 1.5px solid var(--border-color);
+  border-radius: 3px;
+  background: var(--bg-color);
+}
+
+#editor .ProseMirror li[data-item-type="task"][data-checked="true"]::before {
+  border-color: var(--link-color);
+  background: var(--link-color);
+}
+
+#editor .ProseMirror li[data-item-type="task"][data-checked="true"]::after {
+  content: "";
+  position: absolute;
+  top: 0.52em;
+  left: 0.34em;
+  width: 0.25em;
+  height: 0.5em;
+  border: solid var(--bg-color);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+#editor .ProseMirror li > p {
+  margin: 0;
+}
+
+/* Table */
+#editor .ProseMirror table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+}
+
+#editor .ProseMirror th,
+#editor .ProseMirror td {
+  border: 1px solid var(--border-color);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+#editor .ProseMirror th {
+  background: var(--table-header-bg);
+  font-weight: 600;
+}
+
+/* HR */
+#editor .ProseMirror hr {
+  border: none;
+  border-top: 2px solid var(--border-color);
+  margin: 2em 0;
+}
+
+/* Image */
+#editor .ProseMirror img {
+  max-width: 100%;
+  border-radius: 4px;
+}
+
+#editor .ProseMirror ::selection {
+  background: var(--selection-bg);
+}
+
+/* ======= THEMES ======= */
+
+body,
+body.theme-light {
+  --bg-color: #f7f7f5; /* 背景：现代浅灰白 */
+  --text-color: #1f1f1f; /* 正文：柔和近黑 */
+  --text-muted: #6b6b68; /* 次要文字 */
+  --border-color: #e3e3de; /* 边框：低存在感 */
+
+  --link-color: #111111; /* 链接：近黑 */
+
+  --code-bg: #ececea; /* 行内代码底 */
+  --code-block-bg: #202123; /* 代码块底：ChatGPT-like 深灰 */
+  --code-block-text: #f7f7f5; /* 代码块文字 */
+
+  --blockquote-border: #b9b9b3; /* 引用左边框：中性灰 */
+  --blockquote-bg: #efefec; /* 引用底 */
+
+  --table-header-bg: #efefec; /* 表头底 */
+  --table-border: #e3e3de; /* 表格边框 */
+
+  --selection-bg: rgba(0, 0, 0, 0.12); /* 选区：中性灰 */
+}
+
+body.theme-dark {
+  --bg-color: #212121; /* 背景：ChatGPT-like 深灰 */
+  --text-color: #ececec; /* 正文：柔和白 */
+  --text-muted: #a8a8a2; /* 次要文字 */
+  --border-color: #3a3a3a; /* 边框 */
+
+  --link-color: #f4f4f4; /* 链接：近白 */
+
+  --code-bg: #2f2f2f; /* 行内代码底 */
+  --code-block-bg: #171717; /* 代码块底 */
+  --code-block-text: #f4f4f4; /* 代码块文字 */
+
+  --blockquote-border: #10a37f; /* 引用左边框：主强调色 */
+  --blockquote-bg: #2a2a2a; /* 引用底 */
+
+  --table-header-bg: #2a2a2a; /* 表头底 */
+  --table-border: #3a3a3a; /* 表格边框 */
+
+  --selection-bg: rgba(255, 255, 255, 0.18); /* 选区 */
+}
+
+body.theme-literary {
+  --bg-color: #faf9f5; /* 背景：Claude 纸张米白 */
+  --text-color: #141413; /* 正文：Anthropic dark */
+  --text-muted: #6f6d66; /* 次要文字：比官方灰更适合阅读 */
+  --border-color: #e8e6dc; /* 边框：浅暖灰 */
+
+  --link-color: #c15f3c; /* 链接：深陶土橙，文字对比更好 */
+
+  --code-bg: #e8e6dc; /* 行内代码底 */
+  --code-block-bg: #141413; /* 代码块底 */
+  --code-block-text: #faf9f5; /* 代码块文字 */
+
+  --blockquote-border: #d97757; /* 引用左边框：Claude 主橙 */
+  --blockquote-bg: #f4f3ee; /* 引用底：暖灰米白 */
+
+  --table-header-bg: #f4f3ee; /* 表头底 */
+  --table-border: #e8e6dc; /* 表格边框 */
+
+  --selection-bg: rgba(217, 119, 87, 0.22); /* 选区：Claude 橙透明 */
+
+  --editor-font-family:
+    "LXGW WenKai", "Georgia", "Times New Roman", "KaiTi", "楷体", "FangSong", "仿宋", "Kaiti SC",
+    "STKaiti", "Songti SC", "Noto Serif SC", "Noto Serif CJK SC", "Source Han Serif SC", serif;
+}
+
+body.theme-literary #editor .ProseMirror {
+  line-height: 1.9;
+}
+
+body.theme-literary #editor .ProseMirror strong {
+  color: #c15f3c;
+}
+
+body.theme-literary #editor .ProseMirror code {
+  color: #c15f3c;
+}
+
+body.theme-literary #editor .ProseMirror pre {
+  color: var(--code-block-text);
+}
+
+body.theme-literary #editor .ProseMirror pre code {
+  color: inherit;
+}
+
+body.theme-literary #editor .ProseMirror blockquote {
+  background: var(--blockquote-bg);
+  padding: 15px 20px 15px 25px;
+}
+
+body.theme-literary #editor .ProseMirror table th {
+  border-bottom: 2px solid #d97757;
+}
+
+body.theme-literary #editor .ProseMirror table td {
+  border-left: none;
+  border-right: none;
+}
+
+body.theme-newsprint {
+  --bg-color: #f3f2ee; /* 背景：报纸纸张灰白 */
+  --text-color: #1f0909; /* 正文：偏暖油墨黑 */
+  --text-muted: #656565; /* 次要文字：blockquote 原色 */
+  --border-color: #c5c5c5; /* 边框 / 分割线 */
+
+  --link-color: #065588; /* 链接：传统报纸网页蓝 */
+
+  --code-bg: #dadada; /* 行内代码底 */
+  --code-block-bg: #dadada; /* 代码块底：Newsprint 原生偏浅 */
+  --code-block-text: #1f0909; /* 代码块文字 */
+
+  --blockquote-border: #bababa; /* 引用左边框 */
+  --blockquote-bg: transparent; /* Newsprint 原版引用没有明显底色 */
+  --blockquote-text: #656565; /* 引用文字 */
+
+  --table-header-bg: #dadada; /* 表头底 */
+  --table-row-alt-bg: #e8e7e7; /* 偶数行底色 */
+  --table-border: #c5c5c5; /* 表格边框 */
+
+  --selection-bg: rgba(32, 43, 51, 0.63); /* 选区 */
+  --selection-text: #ffffff; /* 选区文字 */
+
+  --editor-font-family:
+    "PT Serif", "Times New Roman", "FZBSJW", "方正报宋简体", "SimSun", "宋体", "NSimSun", "新宋体",
+    serif;
+}
+
+body.theme-academic {
+  --bg-color: #fdfdfb; /* 背景：近纯白纸面，略去刺眼的纯白 */
+  --text-color: #1a1a1a; /* 正文：印刷油墨黑 */
+  --text-muted: #555555; /* 次要文字：脚注/说明灰 */
+  --border-color: #d9d8d2; /* 边框：浅纸灰 */
+
+  --link-color: #1a4b8c; /* 链接：hyperref 风格的克制学术蓝 */
+
+  --code-bg: #f0efeb; /* 行内代码底 */
+  --code-block-bg: #f6f5f1; /* 代码块底：listings 风格浅框 */
+  --code-block-text: #1a1a1a; /* 代码块文字 */
+
+  --blockquote-border: #b7b6ae; /* 引用左边框：中性纸灰 */
+  --blockquote-bg: #f4f3ee; /* 引用底：极淡米灰 */
+
+  --table-header-bg: transparent; /* booktabs 表头无填充 */
+  --table-border: #1a1a1a; /* 表格规则线：深墨横线 */
+
+  --selection-bg: rgba(26, 75, 140, 0.18); /* 选区：学术蓝透明 */
+
+  --editor-font-family:
+    "Latin Modern Roman", "Computer Modern Roman", "Computer Modern", "CMU Serif",
+    "Times New Roman", "SimSun", "宋体", "Songti SC", "STSong", "Noto Serif SC",
+    "Noto Serif CJK SC", "Source Han Serif SC", serif;
+}
+
+/* 正文两端对齐 + 连字符，贴近 LaTeX 默认排版 */
+body.theme-academic #editor .ProseMirror {
+  line-height: 1.7;
+  text-align: justify;
+  hyphens: auto;
+}
+
+/* LaTeX 章节标题：衬线粗体，无下划线分隔线 */
+body.theme-academic #editor .ProseMirror h1,
+body.theme-academic #editor .ProseMirror h2 {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+body.theme-academic #editor .ProseMirror h1 {
+  font-weight: 700;
+  text-align: center; /* 论文标题居中 */
+}
+
+/* 行内代码不强调底色，更接近 \texttt */
+body.theme-academic #editor .ProseMirror code {
+  background: none;
+  padding: 0;
+  font-size: 0.9em;
+}
+
+body.theme-academic #editor .ProseMirror pre {
+  border: 1px solid var(--border-color);
+}
+
+body.theme-academic #editor .ProseMirror pre code {
+  font-size: 0.85em;
+}
+
+/* booktabs 风格表格：仅上/下/表头三条横线，无竖线、无填充 */
+body.theme-academic #editor .ProseMirror table {
+  border-top: 1.5px solid var(--table-border);
+  border-bottom: 1.5px solid var(--table-border);
+}
+
+body.theme-academic #editor .ProseMirror th,
+body.theme-academic #editor .ProseMirror td {
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  border-bottom: none;
+  text-align: left;
+}
+
+body.theme-academic #editor .ProseMirror th {
+  background: transparent;
+  border-bottom: 1px solid var(--table-border);
+}
+
+/* Print styles for PDF export */
+@media print {
+  .workspace-header {
+    display: none !important;
+  }
+  /* Printing the live page must always show the rich view, never the raw-source
+     textarea, regardless of the current editor view mode. */
+  .source-view,
+  .view-mode-switch {
+    display: none !important;
+  }
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  #editor {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+  #editor .ProseMirror {
+    min-height: auto !important;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
