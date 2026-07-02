@@ -35,10 +35,17 @@
     ],
     "fileAssociations": [
       {
-        "name": "Markdown",
+        "name": "AMark.Markdown",
         "ext": ["md", "markdown", "mdown", "mkd"],
+        "description": "Markdown Document",
         "role": "Editor"
       }
-    ]
+    ],
+    "resources": ["icons/amark_markdown_icon.ico"],
+    "windows": {
+      "nsis": {
+        "installerHooks": "windows/hooks.nsi"
+      }
+    }
   }
 }
