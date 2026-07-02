@@ -48,6 +48,11 @@ class ActivityStore {
     this.emit();
   }
 
+  setRecentChanges(recentChanges: RecentChangedFile[]): void {
+    this.recentChanges = recentChanges;
+    this.emit();
+  }
+
   removeChange(filePath: string): void {
     this.recentChanges = this.recentChanges.filter((f) => f.filePath !== filePath);
     this.emit();

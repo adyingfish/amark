@@ -4,9 +4,7 @@ export interface WorkspaceState {
   rootPath: string | null;
   name: string | null;
   files: WorkspaceFileNode[];
-  openTabs: string[];
   activeFilePath: string | null;
-  recentChangedFiles: RecentChangedFile[];
   lastOpenedAt: number | null;
 }
 
