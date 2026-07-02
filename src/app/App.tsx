@@ -101,7 +101,6 @@ const SIDEBAR_COLLAPSED_STORAGE_KEY = "amark-sidebar-collapsed";
 const RICH_TEXT_PREVIEW_SYNC_DEBOUNCE_MS = 200;
 
 const subscribeTabs = (onChange: () => void) => tabsStore.subscribe(onChange);
-const subscribeDocuments = (onChange: () => void) => documentStore.subscribe(onChange);
 
 function loadSavedViewMode(): EditorViewMode {
   const saved = localStorage.getItem(VIEW_MODE_STORAGE_KEY);
@@ -155,9 +154,6 @@ export function App(): ReactElement {
   viewModeRef.current = viewMode;
 
   const activePath = workspace.activeFilePath;
-  const activeDocument = useSyncExternalStore(subscribeDocuments, () =>
-    activePath ? documentStore.getDocument(activePath) : undefined,
-  );
   const hasDocument = activeTabPath !== null;
 
   const showToast = useCallback((message: string, kind: ToastKind): void => {
@@ -1062,7 +1058,7 @@ export function App(): ReactElement {
             ref={editorWrapperRef}
             className={cn("editor-wrapper", `mode-${viewMode}`, !hasDocument && "no-document")}
           >
-            <ExternalUpdateBanner document={activeDocument} onReload={reloadDocumentFromDisk} />
+            <ExternalUpdateBanner filePath={activePath} onReload={reloadDocumentFromDisk} />
             <div ref={editorPanesRef} className="editor-panes">
               <textarea
                 ref={sourceViewRef}
