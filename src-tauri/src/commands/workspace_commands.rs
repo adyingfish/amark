@@ -170,10 +170,7 @@ pub async fn create_markdown_file(
 
 /// Create a new folder inside `parent_path`, returning its full path.
 #[tauri::command]
-pub async fn create_directory(
-    parent_path: String,
-    name: String,
-) -> Result<String, WorkspaceError> {
+pub async fn create_directory(parent_path: String, name: String) -> Result<String, WorkspaceError> {
     let parent = PathBuf::from(&parent_path);
     let path = crate::services::workspace_scan::create_directory(&parent, &name)?;
     Ok(path.to_string_lossy().to_string())
