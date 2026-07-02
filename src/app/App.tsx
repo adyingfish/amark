@@ -8,22 +8,25 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
-import { FolderOpen, PanelLeft, Save } from "lucide-react";
+import { FolderOpen, PanelLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ActivityPanel } from "./components/ActivityPanel";
 import { ExternalUpdateBanner } from "./components/ExternalUpdateBanner";
 import { MenuBar } from "./components/MenuBar";
-import { TabsBarView } from "./components/TabsBarView";
+import { SaveButton } from "./components/SaveButton";
+import { StatusBar } from "./components/StatusBar";
+import { TabsBar } from "./components/TabsBar";
 import { ViewModeSwitch } from "./components/ViewModeSwitch";
 import { WindowControls } from "./components/WindowControls";
 import { WorkspaceTreeView } from "./components/WorkspaceTreeView";
-import { formatDisplayPath, formatSaveStatusForDocument } from "./app-utils";
+import type { AgentState } from "./app-utils";
 import { t as translateStatic, useI18n } from "../features/i18n/i18n-context";
 import { languageStore } from "../features/i18n/language-store";
 import {
@@ -63,7 +66,6 @@ import {
   updateDocumentContent,
 } from "../features/document/document-controller";
 import { tabsStore } from "../features/tabs/tabs-store";
-import type { TabState } from "../features/tabs/tabs-types";
 import { activityStore } from "../features/activity/activity-store";
 import type { RecentChangedFile } from "../features/workspace/workspace-types";
 import { applyTheme, loadSavedTheme } from "../themes/theme-manager";
@@ -94,6 +96,9 @@ type AgentState = "idle" | "active" | "cooldown";
 
 const VIEW_MODE_STORAGE_KEY = "amark-view-mode";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "amark-sidebar-collapsed";
+// Preview is read-only, so a short delay here is imperceptible; keeps Milkdown
+// from re-rendering on every keystroke while typing in the source view.
+const RICH_TEXT_PREVIEW_SYNC_DEBOUNCE_MS = 200;
 
 function loadSavedViewMode(): EditorViewMode {
   const saved = localStorage.getItem(VIEW_MODE_STORAGE_KEY);
@@ -136,7 +141,9 @@ export function App(): ReactElement {
   const syncScrollHandleRef = useRef<SyncScrollHandle | null>(null);
   const sidebarResizerHandleRef = useRef<SidebarResizerHandle | null>(null);
   const activePathRef = useRef<string | null>(workspace.activeFilePath);
+  const previousActiveFilePathRef = useRef<string | null>(workspace.activeFilePath);
   const viewModeRef = useRef<EditorViewMode>(viewMode);
+  const richTextSyncTimerRef = useRef<number | null>(null);
   const toastTimerRef = useRef<number | null>(null);
   const toastRemoveTimerRef = useRef<number | null>(null);
   const agentCooldownTimerRef = useRef<number | null>(null);
@@ -312,6 +319,42 @@ export function App(): ReactElement {
     [openLocalMarkdownLink],
   );
 
+  const applyMarkdownToRichText = useCallback((markdown: string): void => {
+    const editor = editorRef.current;
+    if (editor && editor.getContent() !== markdown) {
+      editor.setContent(markdown);
+    }
+  }, []);
+
+  const applyMarkdownToSourceView = useCallback((markdown: string): void => {
+    const source = sourceViewRef.current;
+    const mode = viewModeRef.current;
+    if ((mode === "source" || mode === "split") && source && source.value !== markdown) {
+      source.value = markdown;
+    }
+  }, []);
+
+  const cancelPendingRichTextSync = useCallback((): void => {
+    if (richTextSyncTimerRef.current !== null) {
+      window.clearTimeout(richTextSyncTimerRef.current);
+      richTextSyncTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleRichTextSync = useCallback(
+    (markdown: string): void => {
+      cancelPendingRichTextSync();
+      richTextSyncTimerRef.current = window.setTimeout(() => {
+        richTextSyncTimerRef.current = null;
+        applyMarkdownToRichText(markdown);
+      }, RICH_TEXT_PREVIEW_SYNC_DEBOUNCE_MS);
+    },
+    [applyMarkdownToRichText, cancelPendingRichTextSync],
+  );
+
+  // Immediate, full sync: used for document/mode switches, where any delay
+  // would flash stale content. Content-edit-driven syncing of the read-only
+  // rich-text preview goes through scheduleRichTextSync instead.
   const syncEditorContent = useCallback((): void => {
     const active = workspaceStore.getActiveFilePath();
     if (!active) return;
@@ -319,17 +362,12 @@ export function App(): ReactElement {
     const document = documentStore.getDocument(active);
     if (!document || !document.isLoaded) return;
 
-    const editor = editorRef.current;
-    const mode = viewModeRef.current;
-    if (mode !== "source" && editor && editor.getContent() !== document.markdown) {
-      editor.setContent(document.markdown);
+    cancelPendingRichTextSync();
+    if (viewModeRef.current !== "source") {
+      applyMarkdownToRichText(document.markdown);
     }
-
-    const source = sourceViewRef.current;
-    if ((mode === "source" || mode === "split") && source && source.value !== document.markdown) {
-      source.value = document.markdown;
-    }
-  }, []);
+    applyMarkdownToSourceView(document.markdown);
+  }, [applyMarkdownToRichText, applyMarkdownToSourceView, cancelPendingRichTextSync]);
 
   const handleTabClick = useCallback((filePath: string): void => {
     tabsStore.activateTab(filePath);
@@ -638,8 +676,9 @@ export function App(): ReactElement {
       unsubscribeTabs();
       unsubscribeDocuments();
       unsubscribeActivity();
+      cancelPendingRichTextSync();
     };
-  }, [markAgentActivity]);
+  }, [markAgentActivity, cancelPendingRichTextSync]);
 
   useEffect(() => {
     const activeTab = tabsState.activeTabPath;
@@ -880,8 +919,32 @@ export function App(): ReactElement {
   }, [hasDocument, syncEditorContent, viewMode]);
 
   useEffect(() => {
-    syncEditorContent();
-  }, [documentVersion, syncEditorContent, workspace.activeFilePath]);
+    const activeFilePath = workspace.activeFilePath;
+    const isDocumentSwitch = previousActiveFilePathRef.current !== activeFilePath;
+    previousActiveFilePathRef.current = activeFilePath;
+
+    if (isDocumentSwitch) {
+      syncEditorContent();
+      return;
+    }
+
+    // Same document, content changed (typing). Keep the source view caught
+    // up immediately, but debounce pushing it into the read-only rich-text
+    // preview so fast typing doesn't re-render Milkdown on every keystroke.
+    const document = activeFilePath ? documentStore.getDocument(activeFilePath) : undefined;
+    if (!document || !document.isLoaded) return;
+
+    applyMarkdownToSourceView(document.markdown);
+    if (viewModeRef.current !== "source") {
+      scheduleRichTextSync(document.markdown);
+    }
+  }, [
+    documentVersion,
+    workspace.activeFilePath,
+    syncEditorContent,
+    applyMarkdownToSourceView,
+    scheduleRichTextSync,
+  ]);
 
   useEffect(() => {
     return () => {
