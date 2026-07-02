@@ -276,11 +276,11 @@ export async function renameDirectoryInTree(path: string, newName: string): Prom
     }
   }
 
-  const recentChangedFiles = workspaceStore.getRecentChangedFiles().map((f) => {
+  const recentChanges = activityStore.getRecentChanges().map((f) => {
     const newFilePath = rewriteDescendantPath(f.filePath, path, newPath);
     return newFilePath === null ? f : { ...f, filePath: newFilePath };
   });
-  workspaceStore.setRecentChangedFiles(recentChangedFiles);
+  activityStore.setRecentChanges(recentChanges);
 
   await refreshWorkspace();
   return newPath;
@@ -385,7 +385,6 @@ export async function setupWorkspaceListeners(): Promise<() => void> {
     if (takeSelfInitiated(e.payload.path)) return;
 
     activityStore.addChange(e.payload.path);
-    workspaceStore.addRecentChangedFile(e.payload.path);
   });
   unlistens.push(unlistenCreated);
 
@@ -401,7 +400,6 @@ export async function setupWorkspaceListeners(): Promise<() => void> {
     if (takeSelfInitiated(filePath)) return;
 
     activityStore.addChange(filePath);
-    workspaceStore.addRecentChangedFile(filePath);
 
     if (tabsStore.isOpen(filePath)) {
       if (documentStore.isDirty(filePath)) {
@@ -428,7 +426,6 @@ export async function setupWorkspaceListeners(): Promise<() => void> {
 async function handleWorkspaceFileChanged(filePath: string): Promise<void> {
   if (!documentStore.hasDocument(filePath)) {
     activityStore.addChange(filePath);
-    workspaceStore.addRecentChangedFile(filePath);
     return;
   }
 
@@ -446,7 +443,6 @@ async function handleWorkspaceFileChanged(filePath: string): Promise<void> {
     }
 
     activityStore.addChange(filePath);
-    workspaceStore.addRecentChangedFile(filePath);
 
     const isActive = workspaceStore.getActiveFilePath() === filePath;
     if (isActive && !documentStore.isDirty(filePath)) {

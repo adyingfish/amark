@@ -1,5 +1,5 @@
 // workspace-store.ts - Workspace state management
-import type { WorkspaceState, WorkspaceFileNode, RecentChangedFile } from "./workspace-types";
+import type { WorkspaceState, WorkspaceFileNode } from "./workspace-types";
 
 type Listener = () => void;
 
@@ -8,9 +8,7 @@ class WorkspaceStore {
     rootPath: null,
     name: null,
     files: [],
-    openTabs: [],
     activeFilePath: null,
-    recentChangedFiles: [],
     lastOpenedAt: null,
   };
 
@@ -38,10 +36,6 @@ class WorkspaceStore {
     return this.state.activeFilePath;
   }
 
-  getRecentChangedFiles(): RecentChangedFile[] {
-    return this.state.recentChangedFiles;
-  }
-
   isWorkspaceOpen(): boolean {
     return this.state.rootPath !== null;
   }
@@ -64,9 +58,7 @@ class WorkspaceStore {
       rootPath: null,
       name: null,
       files: [],
-      openTabs: [],
       activeFilePath: null,
-      recentChangedFiles: [],
       lastOpenedAt: null,
     };
     this.emit();
@@ -79,37 +71,6 @@ class WorkspaceStore {
 
   setActiveFilePath(filePath: string | null): void {
     this.state = { ...this.state, activeFilePath: filePath };
-    this.emit();
-  }
-
-  addRecentChangedFile(filePath: string): void {
-    const newEntry: RecentChangedFile = {
-      filePath,
-      changedAt: Date.now(),
-    };
-    // Remove duplicates and add to front, keep last 20
-    const filtered = this.state.recentChangedFiles.filter((f) => f.filePath !== filePath);
-    this.state = {
-      ...this.state,
-      recentChangedFiles: [newEntry, ...filtered].slice(0, 20),
-    };
-    this.emit();
-  }
-
-  clearRecentChangedFiles(): void {
-    this.state = { ...this.state, recentChangedFiles: [] };
-    this.emit();
-  }
-
-  setRecentChangedFiles(recentChangedFiles: RecentChangedFile[]): void {
-    this.state = { ...this.state, recentChangedFiles };
-    this.emit();
-  }
-
-  // ── Tab integration (sync with tabs store) ─────────────────────────────────
-
-  setOpenTabs(openTabs: string[]): void {
-    this.state = { ...this.state, openTabs };
     this.emit();
   }
 
