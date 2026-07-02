@@ -359,6 +359,7 @@ pub fn run() {
     let show_hidden_state: ShowHiddenState = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(app_state.clone())
