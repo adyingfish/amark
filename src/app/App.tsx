@@ -57,6 +57,7 @@ import {
   resolveLocalMarkdownLink,
   rewriteDescendantPath,
 } from "../features/workspace/workspace-utils";
+import { translateWorkspaceError } from "../features/workspace/workspace-errors";
 import { documentStore } from "../features/document/document-store";
 import {
   reloadDocumentFromDisk,
@@ -497,10 +498,10 @@ export function App(): ReactElement {
         const newName = newPath.split(/[/\\]/).pop() ?? name;
         await openFileFromTree(newPath, newName);
       } catch (error) {
-        showToast(String(error), "error");
+        showToast(translateWorkspaceError(error, locale), "error");
       }
     },
-    [showToast, t],
+    [locale, showToast, t],
   );
 
   const handleTreeNewFolder = useCallback(
@@ -521,10 +522,10 @@ export function App(): ReactElement {
           return next;
         });
       } catch (error) {
-        showToast(String(error), "error");
+        showToast(translateWorkspaceError(error, locale), "error");
       }
     },
-    [showToast, t],
+    [locale, showToast, t],
   );
 
   const handleTreeRename = useCallback(
@@ -539,10 +540,10 @@ export function App(): ReactElement {
       try {
         await renameFileInTree(path, newName);
       } catch (error) {
-        showToast(String(error), "error");
+        showToast(translateWorkspaceError(error, locale), "error");
       }
     },
-    [showToast, t],
+    [locale, showToast, t],
   );
 
   const handleTreeRenameFolder = useCallback(
@@ -568,10 +569,10 @@ export function App(): ReactElement {
           return updated;
         });
       } catch (error) {
-        showToast(String(error), "error");
+        showToast(translateWorkspaceError(error, locale), "error");
       }
     },
-    [showToast, t],
+    [locale, showToast, t],
   );
 
   const handleTreeDelete = useCallback(
@@ -587,7 +588,7 @@ export function App(): ReactElement {
       try {
         await deleteFileInTree(path);
       } catch (error) {
-        showToast(String(error), "error");
+        showToast(translateWorkspaceError(error, locale), "error");
       }
     },
     [locale, showToast, t],
