@@ -108,6 +108,17 @@ const list: Handle = (node, parent, state, info) => {
   return defaultHandlers.list(normalized, parent, state, info);
 };
 
+// --- #6: custom node types (`@path/to/file` refs, block HTML comments) ---
+//
+// Neither `fileRef` nor `commentBlock` is a native mdast type, so
+// mdast-util-to-markdown has no default handler for them and would otherwise
+// throw "Cannot handle unknown node". Both store their exact source text
+// verbatim in `node.value` (see milkdown-file-ref-node.ts /
+// milkdown-comment-block-node.ts), so the handlers just replay it — no
+// escaping, to guarantee a byte-identical round trip.
+const fileRef: Handle = (node) => `@${(node as { value?: string }).value ?? ""}`;
+const commentBlock: Handle = (node) => `<!--${(node as { value?: string }).value ?? ""}-->`;
+
 // Merge our overrides onto whatever Milkdown already injected (it ships custom
 // text/strong/emphasis handlers that preserve the user's emphasis markers, and
 // the GFM preset adds table/task-list handlers — we must not drop those),
@@ -122,6 +133,10 @@ export function buildStringifyOptions(base: Options): Options {
       link,
       list,
       break: lineBreak,
+      // `fileRef`/`commentBlock` are Milkdown-only node types (see
+      // milkdown-file-ref-node.ts / milkdown-comment-block-node.ts), not part
+      // of mdast-util-to-markdown's known `Handlers` union — cast is required.
+      ...({ fileRef, commentBlock } as Options["handlers"]),
     },
   };
 }

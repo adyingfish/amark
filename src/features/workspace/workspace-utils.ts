@@ -47,6 +47,28 @@ function isAbsoluteLocalPath(path: string): boolean {
   return path.startsWith("/") || path.startsWith("\\") || WINDOWS_DRIVE_PATTERN.test(path);
 }
 
+const HOME_RELATIVE_PATTERN = /^~(?:[/\\]|$)/;
+
+/**
+ * True for a `~`-rooted path, e.g. `~/.claude/personal-rules.md` (or bare
+ * `~`). These can't be resolved synchronously (the home directory has to be
+ * fetched from the OS), so callers must check this before calling
+ * resolveLocalFileReference and resolve via resolveHomeRelativePath instead.
+ */
+export function isHomeRelativePath(path: string): boolean {
+  return HOME_RELATIVE_PATTERN.test(path);
+}
+
+/** Expand a `~`-rooted path against an already-resolved home directory. */
+export function resolveHomeRelativePath(homeDir: string, path: string): string {
+  const home = homeDir.replace(/[/\\]+$/, "");
+  const rest = path.replace(HOME_RELATIVE_PATTERN, "");
+  if (!rest) return home;
+
+  const sep = home.includes("\\") && !home.includes("/") ? "\\" : "/";
+  return `${home}${sep}${rest}`;
+}
+
 /**
  * Resolve `relative` (a `..`/`.`-style relative path, using either separator)
  * against the directory containing `basePath`.
@@ -69,20 +91,44 @@ function resolveRelativeToDirectory(basePath: string, relative: string): string 
 }
 
 /**
+ * Resolve a local link/reference target — as authored in the document at
+ * `basePath` — into an absolute path, or null when it isn't a local file
+ * reference at all (an http(s) URL, `mailto:`, an in-page anchor, etc).
+ */
+function resolveLocalPathTarget(basePath: string, href: string): string | null {
+  const target = href.split(/[?#]/)[0];
+  if (!target) return null;
+  if (URL_SCHEME_PATTERN.test(target) && !WINDOWS_DRIVE_PATTERN.test(target)) return null;
+  // `~`-rooted paths need an async OS lookup for the home directory — the
+  // caller must special-case isHomeRelativePath() before reaching here.
+  if (isHomeRelativePath(target)) return null;
+
+  return isAbsoluteLocalPath(target) ? target : resolveRelativeToDirectory(basePath, target);
+}
+
+/**
  * Resolve a Markdown link's `href` — as authored in the document at
  * `basePath` — into an absolute path, or null when it isn't a local Markdown
  * file link (an http(s) URL, `mailto:`, an in-page anchor, a non-Markdown
  * file, etc).
  */
 export function resolveLocalMarkdownLink(basePath: string, href: string): string | null {
-  const target = href.split(/[?#]/)[0];
-  if (!target) return null;
-  if (URL_SCHEME_PATTERN.test(target) && !WINDOWS_DRIVE_PATTERN.test(target)) return null;
-
+  const target = href.split(/[?#]/)[0] ?? "";
   const fileName = target.split(/[/\\]/).pop() ?? "";
   if (!isMarkdownFile(fileName)) return null;
 
-  return isAbsoluteLocalPath(target) ? target : resolveRelativeToDirectory(basePath, target);
+  return resolveLocalPathTarget(basePath, href);
+}
+
+/**
+ * Resolve an `@relative/path` file reference (see services/file-ref.ts) —
+ * as authored in the document at `basePath` — into an absolute path. Unlike
+ * resolveLocalMarkdownLink, any file type is navigable, not just Markdown.
+ * Returns null for a `~`-rooted reference — check isHomeRelativePath() first
+ * and resolve those via resolveHomeRelativePath() instead.
+ */
+export function resolveLocalFileReference(basePath: string, rawPath: string): string | null {
+  return resolveLocalPathTarget(basePath, rawPath);
 }
 
 /**
