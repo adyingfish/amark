@@ -17,16 +17,19 @@ export function StatusBar({ agentState }: { agentState: AgentState }): ReactElem
   );
   const rootPath = useSyncExternalStore(subscribeWorkspace, () => workspaceStore.getRootPath());
   const workspaceName = useSyncExternalStore(subscribeWorkspace, () => workspaceStore.getName());
-  const activeDocument = useSyncExternalStore(subscribeDocuments, () =>
-    activePath ? documentStore.getDocument(activePath) : undefined,
-  );
+  // Snapshot the formatted string instead of the document record: records are
+  // re-created on every content emit, so an object snapshot would re-render
+  // this component on every keystroke instead of only on status changes.
+  const statusRight = useSyncExternalStore(subscribeDocuments, () => {
+    const activeDocument = activePath ? documentStore.getDocument(activePath) : undefined;
+    return activeDocument ? formatSaveStatusForDocument(activeDocument, locale) : "";
+  });
 
   const statusLeft = activePath
     ? formatDisplayPath(activePath, rootPath, workspaceName)
     : rootPath
       ? t("status.noFileSelected")
       : t("status.noWorkspaceOpen");
-  const statusRight = activeDocument ? formatSaveStatusForDocument(activeDocument, locale) : "";
 
   return (
     <div className="status-bar">
