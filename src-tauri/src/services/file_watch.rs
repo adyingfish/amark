@@ -1,16 +1,20 @@
 // file_watch.rs - Workspace file watching service
 use notify::{Config, Event, EventKind, PollWatcher, RecursiveMode, Watcher};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
 /// Workspace watcher state. Held as a trait object so a network path can fall
-/// back from the native `RecommendedWatcher` to a polling watcher.
+/// back from the native `RecommendedWatcher` to a polling watcher. Wrapped in
+/// `Arc<Mutex<..>>` (rather than owned outright) so the background thread in
+/// `start_workspace_watch` that registers watches for newly discovered
+/// directories can share it.
 pub struct WorkspaceWatcher {
-    pub _watcher: Box<dyn Watcher + Send>,
+    pub _watcher: Arc<Mutex<Box<dyn Watcher + Send>>>,
 }
 
 pub type WatcherState = Arc<Mutex<HashMap<String, WorkspaceWatcher>>>;
@@ -51,10 +55,11 @@ fn is_markdown_file(path: &PathBuf) -> bool {
         .unwrap_or(false)
 }
 
-/// Check if a file should be watched (not hidden unless `show_hidden`, not in
-/// node_modules, etc.)
+/// Check if a file should be watched (not hidden unless `show_hidden`).
+/// Generated-noise directories are excluded structurally, at watch
+/// registration time (see `WATCH_EXCLUDED_DIRS`), so events from inside them
+/// never reach this filter in the first place.
 fn should_watch_path(path: &PathBuf, show_hidden: bool) -> bool {
-    // Skip hidden files/directories, unless the caller wants them shown.
     if !show_hidden
         && path
             .file_name()
@@ -65,15 +70,6 @@ fn should_watch_path(path: &PathBuf, show_hidden: bool) -> bool {
         return false;
     }
 
-    // Skip common non-source directories
-    let path_str = path.to_string_lossy();
-    let skip_patterns = ["/node_modules/", "/target/", "/dist/", "/.git/", "/build/"];
-    for pattern in &skip_patterns {
-        if path_str.contains(pattern) {
-            return false;
-        }
-    }
-
     true
 }
 
@@ -81,9 +77,82 @@ fn should_watch_path(path: &PathBuf, show_hidden: bool) -> bool {
 /// native filesystem notifications, so `ReadDirectoryChangesW` (the recommended
 /// watcher on Windows) silently sees nothing. Detect those paths so we can fall
 /// back to a polling watcher.
-fn is_network_path(root_path: &PathBuf) -> bool {
+fn is_network_path(root_path: &Path) -> bool {
     let s = root_path.to_string_lossy();
     s.starts_with(r"\\") || s.contains("wsl.localhost") || s.contains("wsl$")
+}
+
+/// Directory names that are never watched: large generated-artifact folders
+/// whose contents are irrelevant to a Markdown workspace. `node_modules` in
+/// particular can hold tens of thousands of subdirectories — enough to
+/// exhaust inotify's `max_user_watches`, or, on the `PollWatcher` fallback,
+/// to make every 2-second poll tick re-stat the entire tree. Checked by
+/// directory *name*, and applied before a directory is ever registered with
+/// the watcher, rather than filtering events after the fact.
+const WATCH_EXCLUDED_DIRS: [&str; 5] = ["node_modules", "target", "dist", "build", ".git"];
+
+fn is_excluded_dir(name: &str) -> bool {
+    WATCH_EXCLUDED_DIRS.contains(&name)
+}
+
+/// Recursively register a non-recursive watch on `dir` and every
+/// non-excluded subdirectory beneath it. Used both for the initial workspace
+/// walk and, from `start_workspace_watch`'s registrar thread, when a
+/// directory appears that may already have pre-existing children (e.g. one
+/// moved in from outside the workspace).
+fn watch_dir_tree(watcher: &mut dyn Watcher, dir: &Path) {
+    if watcher.watch(dir, RecursiveMode::NonRecursive).is_err() {
+        return;
+    }
+
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+
+    for entry in entries.flatten() {
+        let is_dir = entry.metadata().map(|m| m.is_dir()).unwrap_or(false);
+        if !is_dir {
+            continue;
+        }
+        let name = entry.file_name();
+        if is_excluded_dir(&name.to_string_lossy()) {
+            continue;
+        }
+        watch_dir_tree(watcher, &entry.path());
+    }
+}
+
+/// Spawn the background thread that registers watches for directories
+/// discovered after the initial walk (created, or moved/renamed in from
+/// outside an already-watched location). This must run on its own thread
+/// rather than inline in the notify event handler: both the inotify and
+/// poll backends invoke the event handler from the very thread that must
+/// also process a `watch()` call, so calling `watch()` synchronously from
+/// inside the callback would deadlock.
+///
+/// Holds only a `Weak` handle so it never keeps `watcher` alive on its own:
+/// once the last strong `Arc` is dropped (`stop_workspace_watch`), the
+/// watcher — and the channel sender its event handler owns — is dropped
+/// too, closing the channel and ending this thread on its next receive.
+fn spawn_new_dir_registrar(
+    watcher: &Arc<Mutex<Box<dyn Watcher + Send>>>,
+    new_dir_rx: std::sync::mpsc::Receiver<PathBuf>,
+) {
+    let weak_watcher = Arc::downgrade(watcher);
+    let _ = thread::Builder::new()
+        .name("amark-watch-register".to_string())
+        .spawn(move || {
+            for path in new_dir_rx {
+                let Some(watcher) = weak_watcher.upgrade() else {
+                    break;
+                };
+                let mut guard = match watcher.lock() {
+                    Ok(g) => g,
+                    Err(_) => continue,
+                };
+                watch_dir_tree(&mut **guard, &path);
+            }
+        });
 }
 
 /// Start watching a workspace directory. `show_hidden` is read live (via the
@@ -100,15 +169,38 @@ pub fn start_workspace_watch(
     // Stop any existing watcher for this window
     stop_workspace_watch(&window_label, watchers);
 
-    // Create watcher. Network paths can't deliver native events, so poll instead.
+    // Newly discovered directories (created, or moved/renamed in from
+    // outside an already-watched location) are registered from a dedicated
+    // thread below, never from inside `handler` itself: both the inotify and
+    // poll backends invoke the event handler from the very thread that must
+    // also process a `watch()` call, so calling `watch()` synchronously from
+    // inside the callback would deadlock.
+    let (new_dir_tx, new_dir_rx) = std::sync::mpsc::channel::<PathBuf>();
+
     let app_clone = app.clone();
     let handler = move |res: notify::Result<Event>| {
-        if let Ok(event) = res {
-            let show_hidden = show_hidden_state.load(Ordering::Relaxed);
-            handle_watch_event(&app_clone, event, show_hidden);
+        let Ok(event) = res else { return };
+        let show_hidden = show_hidden_state.load(Ordering::Relaxed);
+
+        for path in &event.paths {
+            if !path.is_dir() {
+                continue;
+            }
+            let excluded = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(is_excluded_dir)
+                .unwrap_or(false);
+            if !excluded {
+                let _ = new_dir_tx.send(path.clone());
+            }
         }
+
+        handle_watch_event(&app_clone, event, show_hidden);
     };
-    let mut _watcher: Box<dyn Watcher + Send> = if is_network_path(&root_path) {
+
+    // Create watcher. Network paths can't deliver native events, so poll instead.
+    let mut watcher: Box<dyn Watcher + Send> = if is_network_path(&root_path) {
         match PollWatcher::new(
             handler,
             Config::default().with_poll_interval(Duration::from_secs(2)),
@@ -123,15 +215,19 @@ pub fn start_workspace_watch(
         }
     };
 
-    // Watch the root path recursively
-    if let Err(e) = _watcher.watch(&root_path, RecursiveMode::Recursive) {
-        return Err(format!("Failed to watch directory: {}", e));
-    }
+    // Walk the tree ourselves and register one non-recursive watch per
+    // directory, skipping generated-noise subtrees entirely (see
+    // `WATCH_EXCLUDED_DIRS`) instead of watching everything recursively from
+    // the root and filtering events after the fact.
+    watch_dir_tree(&mut *watcher, &root_path);
+
+    let watcher = Arc::new(Mutex::new(watcher));
+    spawn_new_dir_registrar(&watcher, new_dir_rx);
 
     // Store the watcher
     {
         let mut guard = watchers.lock().unwrap();
-        guard.insert(window_label, WorkspaceWatcher { _watcher });
+        guard.insert(window_label, WorkspaceWatcher { _watcher: watcher });
     }
 
     Ok(())
@@ -194,5 +290,133 @@ fn handle_watch_event(app: &AppHandle, event: Event, show_hidden: bool) {
             }
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+    use std::time::Instant;
+
+    fn unique_temp_dir(label: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "amark-file-watch-test-{}-{}-{}",
+            label,
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// Excluded directories (node_modules, etc.) must never receive a watch:
+    /// changes inside them should produce no events, while changes in a
+    /// sibling directory that *is* watched must still be reported.
+    #[test]
+    fn excluded_dirs_are_never_watched() {
+        let root = unique_temp_dir("excluded");
+        std::fs::create_dir_all(root.join("sub1")).unwrap();
+        std::fs::create_dir_all(root.join("node_modules/inner")).unwrap();
+
+        let (tx, rx) = mpsc::channel::<PathBuf>();
+        let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
+            if let Ok(event) = res {
+                for p in event.paths {
+                    let _ = tx.send(p);
+                }
+            }
+        })
+        .unwrap();
+
+        watch_dir_tree(&mut watcher, &root);
+
+        // A file inside the excluded subtree must not surface an event.
+        std::fs::write(root.join("node_modules/inner/file.txt"), "x").unwrap();
+        assert!(
+            rx.recv_timeout(Duration::from_millis(500)).is_err(),
+            "expected no event for a path inside an excluded directory"
+        );
+
+        // A file inside a legitimate, non-recursively-watched subdirectory
+        // must still surface an event.
+        std::fs::write(root.join("sub1/file.md"), "x").unwrap();
+        let seen = rx.recv_timeout(Duration::from_secs(5));
+        assert_eq!(seen, Ok(root.join("sub1/file.md")));
+
+        drop(watcher);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// A directory created after the initial walk must have its own
+    /// (possibly pre-existing) contents watched too, via the registrar
+    /// thread spawned by `spawn_new_dir_registrar` — this exercises the
+    /// exact call path that would deadlock if `watch()` were invoked
+    /// synchronously from inside the notify callback instead.
+    #[test]
+    fn new_directory_is_watched_via_registrar_thread() {
+        let root = unique_temp_dir("new-dir");
+
+        let (event_tx, event_rx) = mpsc::channel::<PathBuf>();
+        let (new_dir_tx, new_dir_rx) = mpsc::channel::<PathBuf>();
+        let handler = move |res: notify::Result<Event>| {
+            let Ok(event) = res else { return };
+            for path in &event.paths {
+                if !path.is_dir() {
+                    continue;
+                }
+                let excluded = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .map(is_excluded_dir)
+                    .unwrap_or(false);
+                if !excluded {
+                    let _ = new_dir_tx.send(path.clone());
+                }
+            }
+            for p in event.paths {
+                let _ = event_tx.send(p);
+            }
+        };
+
+        let mut watcher: Box<dyn Watcher + Send> =
+            Box::new(notify::recommended_watcher(handler).unwrap());
+        watch_dir_tree(&mut *watcher, &root);
+        let watcher = Arc::new(Mutex::new(watcher));
+        spawn_new_dir_registrar(&watcher, new_dir_rx);
+
+        // Create a brand-new subdirectory with a file already inside it
+        // (simulating a directory moved in from elsewhere), then wait for
+        // the registrar thread to pick up the Create event and register it,
+        // before writing a *second* file that only a dynamically-added
+        // watch would catch.
+        let sub2 = root.join("sub2");
+        std::fs::create_dir_all(&sub2).unwrap();
+        std::fs::write(sub2.join("existing.md"), "x").unwrap();
+        std::thread::sleep(Duration::from_millis(500));
+        std::fs::write(sub2.join("later.md"), "y").unwrap();
+
+        let target = sub2.join("later.md");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut saw_later = false;
+        while Instant::now() < deadline {
+            match event_rx.recv_timeout(Duration::from_millis(200)) {
+                Ok(p) if p == target => {
+                    saw_later = true;
+                    break;
+                }
+                _ => {}
+            }
+        }
+        assert!(
+            saw_later,
+            "expected an event for a file created inside a directory that appeared after the initial walk"
+        );
+
+        drop(watcher);
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
