@@ -304,19 +304,48 @@ export async function deleteFileInTree(path: string): Promise<void> {
 
 // ── Event listeners ──────────────────────────────────────────────────────────
 
+// Trailing merge window for watcher events: a burst of create/remove events
+// (e.g. a multi-file move) collapses into a single refreshWorkspace() instead
+// of one scan per event; file-changed events are deduped per path so rapid
+// re-saves of the same file only trigger one read.
+const WORKSPACE_REFRESH_DEBOUNCE_MS = 200;
+const FILE_CHANGED_DEBOUNCE_MS = 200;
+
 export async function setupWorkspaceListeners(): Promise<() => void> {
   const unlistens: (() => void)[] = [];
 
+  let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  function scheduleWorkspaceRefresh(): void {
+    if (refreshTimer !== undefined) clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => {
+      refreshTimer = undefined;
+      refreshWorkspace();
+    }, WORKSPACE_REFRESH_DEBOUNCE_MS);
+  }
+
+  const fileChangedTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  function scheduleFileChanged(path: string): void {
+    const pending = fileChangedTimers.get(path);
+    if (pending !== undefined) clearTimeout(pending);
+    fileChangedTimers.set(
+      path,
+      setTimeout(() => {
+        fileChangedTimers.delete(path);
+        handleWorkspaceFileChanged(path);
+      }, FILE_CHANGED_DEBOUNCE_MS),
+    );
+  }
+
   // File changed event
   const unlistenChanged = await listen<{ path: string }>("workspace://file-changed", (e) => {
-    handleWorkspaceFileChanged(e.payload.path);
+    scheduleFileChanged(e.payload.path);
   });
   unlistens.push(unlistenChanged);
 
   // File created event
   const unlistenCreated = await listen<{ path: string }>("workspace://file-created", (e) => {
     // Refresh the file tree to show new file
-    refreshWorkspace();
+    scheduleWorkspaceRefresh();
 
     // Skip surfacing user-initiated creations (via the tree UI) as external changes.
     if (takeSelfInitiated(e.payload.path)) return;
@@ -331,7 +360,7 @@ export async function setupWorkspaceListeners(): Promise<() => void> {
     const filePath = e.payload.path;
 
     // Refresh the file tree
-    refreshWorkspace();
+    scheduleWorkspaceRefresh();
 
     // Skip surfacing user-initiated deletions/renames (via the tree UI) as external
     // changes; the tree-driven controller has already adjusted any open tab.
@@ -353,6 +382,9 @@ export async function setupWorkspaceListeners(): Promise<() => void> {
 
   // Return cleanup function
   return () => {
+    if (refreshTimer !== undefined) clearTimeout(refreshTimer);
+    for (const timer of fileChangedTimers.values()) clearTimeout(timer);
+    fileChangedTimers.clear();
     for (const unlisten of unlistens) {
       unlisten();
     }
