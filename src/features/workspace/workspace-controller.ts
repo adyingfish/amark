@@ -1,6 +1,6 @@
 // workspace-controller.ts - Workspace business logic
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { workspaceStore } from "./workspace-store";
 import { documentStore } from "../document/document-store";
 import { tabsStore } from "../tabs/tabs-store";
@@ -191,8 +191,9 @@ export function newUntitledFile(): void {
 
 /**
  * Create a new empty Markdown file inside `parentPath`. Returns the created
- * file's full path. Throws (with the backend's message) on failure, e.g. a name
- * collision, so the caller can surface it to the user.
+ * file's full path. Throws a structured `WorkspaceError` payload on failure
+ * (see `workspace-errors.ts`), e.g. a name collision, so the caller can
+ * translate and surface it to the user.
  */
 export async function createFileInTree(parentPath: string, name: string): Promise<string> {
   const newPath = await invoke<string>("create_markdown_file", { parentPath, name });
@@ -203,8 +204,8 @@ export async function createFileInTree(parentPath: string, name: string): Promis
 
 /**
  * Create an empty folder inside `parentPath`. Returns the created folder's
- * full path. Throws (with the backend's message) on failure, e.g. a name
- * collision.
+ * full path. Throws a structured `WorkspaceError` payload on failure, e.g. a
+ * name collision.
  */
 export async function createDirectoryInTree(parentPath: string, name: string): Promise<string> {
   const newPath = await invoke<string>("create_directory", { parentPath, name });
@@ -214,7 +215,8 @@ export async function createDirectoryInTree(parentPath: string, name: string): P
 
 /**
  * Rename a Markdown file in place, moving any open tab/document to the new path.
- * Returns the new full path. Throws (with the backend's message) on failure.
+ * Returns the new full path. Throws a structured `WorkspaceError` payload on
+ * failure.
  */
 export async function renameFileInTree(path: string, newName: string): Promise<string> {
   markSelfInitiated(path);
@@ -240,8 +242,9 @@ export async function renameFileInTree(path: string, newName: string): Promise<s
 /**
  * Rename a folder in place, moving any open tabs/documents nested inside it
  * to their new paths and keeping Recent Changes pointing at files that still
- * exist. Returns the new full path. Throws (with the backend's message) on
- * failure. The workspace root is never passed here — the tree UI excludes it.
+ * exist. Returns the new full path. Throws a structured `WorkspaceError`
+ * payload on failure. The workspace root is never passed here — the tree UI
+ * excludes it.
  */
 export async function renameDirectoryInTree(path: string, newName: string): Promise<string> {
   // Snapshot the Markdown files nested under this folder before the rename,
@@ -287,8 +290,8 @@ export async function renameDirectoryInTree(path: string, newName: string): Prom
 }
 
 /**
- * Delete a Markdown file, closing its tab/document if open. Throws (with the
- * backend's message) on failure.
+ * Delete a Markdown file, closing its tab/document if open. Throws a
+ * structured `WorkspaceError` payload on failure.
  */
 export async function deleteFileInTree(path: string): Promise<void> {
   markSelfInitiated(path);
@@ -344,6 +347,12 @@ function createDebouncer(fn: () => void, debounceMs: number, maxWaitMs: number) 
 }
 
 export async function setupWorkspaceListeners(): Promise<() => void> {
+  // Window-scoped, not the global listen() from "@tauri-apps/api/event": the
+  // backend targets these events at this window's label via emit_to, but a
+  // listener registered with the global listen() (target "Any") receives
+  // every window's events regardless of how narrowly the backend targets
+  // them — see handle_watch_event in file_watch.rs.
+  const currentWindow = getCurrentWindow();
   const unlistens: (() => void)[] = [];
 
   const workspaceRefreshDebouncer = createDebouncer(
@@ -371,45 +380,54 @@ export async function setupWorkspaceListeners(): Promise<() => void> {
   }
 
   // File changed event
-  const unlistenChanged = await listen<{ path: string }>("workspace://file-changed", (e) => {
-    scheduleFileChanged(e.payload.path);
-  });
+  const unlistenChanged = await currentWindow.listen<{ path: string }>(
+    "workspace://file-changed",
+    (e) => {
+      scheduleFileChanged(e.payload.path);
+    },
+  );
   unlistens.push(unlistenChanged);
 
   // File created event
-  const unlistenCreated = await listen<{ path: string }>("workspace://file-created", (e) => {
-    // Refresh the file tree to show new file
-    scheduleWorkspaceRefresh();
+  const unlistenCreated = await currentWindow.listen<{ path: string }>(
+    "workspace://file-created",
+    (e) => {
+      // Refresh the file tree to show new file
+      scheduleWorkspaceRefresh();
 
-    // Skip surfacing user-initiated creations (via the tree UI) as external changes.
-    if (takeSelfInitiated(e.payload.path)) return;
+      // Skip surfacing user-initiated creations (via the tree UI) as external changes.
+      if (takeSelfInitiated(e.payload.path)) return;
 
-    activityStore.addChange(e.payload.path);
-  });
+      activityStore.addChange(e.payload.path);
+    },
+  );
   unlistens.push(unlistenCreated);
 
   // File removed event
-  const unlistenRemoved = await listen<{ path: string }>("workspace://file-removed", (e) => {
-    const filePath = e.payload.path;
+  const unlistenRemoved = await currentWindow.listen<{ path: string }>(
+    "workspace://file-removed",
+    (e) => {
+      const filePath = e.payload.path;
 
-    // Refresh the file tree
-    scheduleWorkspaceRefresh();
+      // Refresh the file tree
+      scheduleWorkspaceRefresh();
 
-    // Skip surfacing user-initiated deletions/renames (via the tree UI) as external
-    // changes; the tree-driven controller has already adjusted any open tab.
-    if (takeSelfInitiated(filePath)) return;
+      // Skip surfacing user-initiated deletions/renames (via the tree UI) as external
+      // changes; the tree-driven controller has already adjusted any open tab.
+      if (takeSelfInitiated(filePath)) return;
 
-    activityStore.addChange(filePath);
+      activityStore.addChange(filePath);
 
-    if (tabsStore.isOpen(filePath)) {
-      if (documentStore.isDirty(filePath)) {
-        documentStore.markDeleted(filePath);
-      } else {
-        tabsStore.closeTab(filePath);
-        documentStore.unloadDocument(filePath);
+      if (tabsStore.isOpen(filePath)) {
+        if (documentStore.isDirty(filePath)) {
+          documentStore.markDeleted(filePath);
+        } else {
+          tabsStore.closeTab(filePath);
+          documentStore.unloadDocument(filePath);
+        }
       }
-    }
-  });
+    },
+  );
   unlistens.push(unlistenRemoved);
 
   // Return cleanup function

@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter};
+use tauri::{Emitter, WebviewWindow};
 
 /// Workspace watcher state. Held as a trait object so a network path can fall
 /// back from the native `RecommendedWatcher` to a polling watcher. Wrapped in
@@ -19,11 +19,29 @@ pub struct WorkspaceWatcher {
 
 pub type WatcherState = Arc<Mutex<HashMap<String, WorkspaceWatcher>>>;
 
-/// Whether hidden files/folders (dotfiles) should be watched, kept in sync
-/// with the frontend's "show hidden folders" preference so events from
-/// inside a now-visible hidden folder aren't silently dropped. Shared (not
-/// per-watcher) since the app only watches one workspace at a time.
-pub type ShowHiddenState = Arc<AtomicBool>;
+/// Whether hidden files/folders (dotfiles) should be watched for one
+/// window's workspace, kept in sync with that window's "show hidden
+/// folders" preference so events from inside a now-visible hidden folder
+/// aren't silently dropped. One flag per window (each window can watch a
+/// different workspace with its own preference).
+pub type ShowHiddenFlag = Arc<AtomicBool>;
+
+/// App-wide registry of each window's `ShowHiddenFlag`, keyed by window
+/// label and populated lazily via `get_or_create_show_hidden_flag`.
+pub type ShowHiddenState = Arc<Mutex<HashMap<String, ShowHiddenFlag>>>;
+
+/// Get — or lazily create, defaulting to `false` — the `ShowHiddenFlag` for
+/// `window_label`. Shared by the `start_watch_workspace` and
+/// `set_show_hidden_files` commands so both read/write the same per-window
+/// flag regardless of call order.
+pub fn get_or_create_show_hidden_flag(state: &ShowHiddenState, window_label: &str) -> ShowHiddenFlag {
+    state
+        .lock()
+        .unwrap()
+        .entry(window_label.to_string())
+        .or_insert_with(|| Arc::new(AtomicBool::new(false)))
+        .clone()
+}
 
 /// File change event payload for frontend
 #[derive(Debug, Clone, serde::Serialize)]
@@ -155,16 +173,16 @@ fn spawn_new_dir_registrar(
         });
 }
 
-/// Start watching a workspace directory. `show_hidden` is read live (via the
-/// shared atomic) on every event, so toggling it later doesn't require
-/// restarting the watcher.
+/// Start watching a workspace directory for `window`. `show_hidden_flag` is
+/// read live (via the shared atomic) on every event, so toggling it later
+/// doesn't require restarting the watcher.
 pub fn start_workspace_watch(
-    app: AppHandle,
+    window: WebviewWindow,
     root_path: PathBuf,
     watchers: &WatcherState,
-    show_hidden_state: ShowHiddenState,
+    show_hidden_flag: ShowHiddenFlag,
 ) -> Result<(), String> {
-    let window_label = "main".to_string(); // Default window label
+    let window_label = window.label().to_string();
 
     // Stop any existing watcher for this window
     stop_workspace_watch(&window_label, watchers);
@@ -177,10 +195,10 @@ pub fn start_workspace_watch(
     // inside the callback would deadlock.
     let (new_dir_tx, new_dir_rx) = std::sync::mpsc::channel::<PathBuf>();
 
-    let app_clone = app.clone();
+    let window_clone = window.clone();
     let handler = move |res: notify::Result<Event>| {
         let Ok(event) = res else { return };
-        let show_hidden = show_hidden_state.load(Ordering::Relaxed);
+        let show_hidden = show_hidden_flag.load(Ordering::Relaxed);
 
         for path in &event.paths {
             if !path.is_dir() {
@@ -196,7 +214,7 @@ pub fn start_workspace_watch(
             }
         }
 
-        handle_watch_event(&app_clone, event, show_hidden);
+        handle_watch_event(&window_clone, event, show_hidden);
     };
 
     // Create watcher. Network paths can't deliver native events, so poll instead.
@@ -239,8 +257,12 @@ pub fn stop_workspace_watch(window_label: &str, watchers: &WatcherState) {
     guard.remove(window_label);
 }
 
-/// Handle a file watch event
-fn handle_watch_event(app: &AppHandle, event: Event, show_hidden: bool) {
+/// Handle a file watch event. Emits are targeted at `window`'s label via
+/// `emit_to` — a plain `emit()` would broadcast to every window regardless
+/// of which `WebviewWindow` instance it's called on, so callers must also
+/// listen with a window-scoped listener (e.g. `Window::listen`, not the
+/// global `listen()`) for this targeting to actually take effect.
+fn handle_watch_event(window: &WebviewWindow, event: Event, show_hidden: bool) {
     // Only care about Markdown files
     let paths: Vec<PathBuf> = event
         .paths
@@ -252,11 +274,14 @@ fn handle_watch_event(app: &AppHandle, event: Event, show_hidden: bool) {
         return;
     }
 
+    let label = window.label();
+
     match event.kind {
         EventKind::Modify(_) => {
             for path in paths {
                 if is_markdown_file(&path) {
-                    let _ = app.emit(
+                    let _ = window.emit_to(
+                        label,
                         "workspace://file-changed",
                         FileChangedEvent {
                             path: path.to_string_lossy().to_string(),
@@ -268,7 +293,8 @@ fn handle_watch_event(app: &AppHandle, event: Event, show_hidden: bool) {
         EventKind::Create(_) => {
             for path in paths {
                 if is_markdown_file(&path) {
-                    let _ = app.emit(
+                    let _ = window.emit_to(
+                        label,
                         "workspace://file-created",
                         FileCreatedEvent {
                             path: path.to_string_lossy().to_string(),
@@ -280,7 +306,8 @@ fn handle_watch_event(app: &AppHandle, event: Event, show_hidden: bool) {
         EventKind::Remove(_) => {
             for path in paths {
                 if is_markdown_file(&path) {
-                    let _ = app.emit(
+                    let _ = window.emit_to(
+                        label,
                         "workspace://file-removed",
                         FileRemovedEvent {
                             path: path.to_string_lossy().to_string(),
@@ -298,6 +325,21 @@ mod tests {
     use super::*;
     use std::sync::mpsc;
     use std::time::Instant;
+
+    /// Each window must get its own flag (identity, not just equal value),
+    /// and repeat lookups for the same label must return that same flag
+    /// rather than silently resetting it.
+    #[test]
+    fn show_hidden_flag_is_per_window_and_idempotent() {
+        let state: ShowHiddenState = Arc::new(Mutex::new(HashMap::new()));
+        let a1 = get_or_create_show_hidden_flag(&state, "main");
+        let a2 = get_or_create_show_hidden_flag(&state, "main");
+        assert!(Arc::ptr_eq(&a1, &a2));
+
+        let b1 = get_or_create_show_hidden_flag(&state, "main-2");
+        a1.store(true, Ordering::Relaxed);
+        assert!(!b1.load(Ordering::Relaxed));
+    }
 
     fn unique_temp_dir(label: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
