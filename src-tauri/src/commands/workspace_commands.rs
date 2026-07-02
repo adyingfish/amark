@@ -74,7 +74,9 @@ pub async fn scan_workspace(
     show_hidden: bool,
 ) -> Result<WorkspaceScanResult, String> {
     let path = PathBuf::from(&root_path);
-    scan_workspace_directory(&path, show_hidden)
+    tauri::async_runtime::spawn_blocking(move || scan_workspace_directory(&path, show_hidden))
+        .await
+        .map_err(|e| format!("Failed to scan workspace: {}", e))?
 }
 
 /// Read a file's content
