@@ -92,13 +92,14 @@ interface ThemeResult {
 }
 
 type ToastKind = "success" | "error";
-type AgentState = "idle" | "active" | "cooldown";
 
 const VIEW_MODE_STORAGE_KEY = "amark-view-mode";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "amark-sidebar-collapsed";
 // Preview is read-only, so a short delay here is imperceptible; keeps Milkdown
 // from re-rendering on every keystroke while typing in the source view.
 const RICH_TEXT_PREVIEW_SYNC_DEBOUNCE_MS = 200;
+
+const subscribeTabs = (onChange: () => void) => tabsStore.subscribe(onChange);
 
 function loadSavedViewMode(): EditorViewMode {
   const saved = localStorage.getItem(VIEW_MODE_STORAGE_KEY);
@@ -116,7 +117,7 @@ function loadSidebarCollapsed(): boolean {
 export function App(): ReactElement {
   const { locale, t } = useI18n();
   const [workspace, setWorkspace] = useState<WorkspaceState>(() => workspaceStore.getState());
-  const [tabsState, setTabsState] = useState<TabState>(() => tabsStore.getState());
+  const activeTabPath = useSyncExternalStore(subscribeTabs, () => tabsStore.getActiveTabPath());
   const [documentVersion, setDocumentVersion] = useState(0);
   const [recentChanges, setRecentChanges] = useState<RecentChangedFile[]>(() => [
     ...activityStore.getRecentChanges(),
@@ -154,7 +155,7 @@ export function App(): ReactElement {
 
   const activePath = workspace.activeFilePath;
   const activeDocument = activePath ? documentStore.getDocument(activePath) : undefined;
-  const hasDocument = tabsState.activeTabPath !== null;
+  const hasDocument = activeTabPath !== null;
 
   const showToast = useCallback((message: string, kind: ToastKind): void => {
     if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
@@ -660,9 +661,6 @@ export function App(): ReactElement {
     const unsubscribeWorkspace = workspaceStore.subscribe(() => {
       setWorkspace({ ...workspaceStore.getState() });
     });
-    const unsubscribeTabs = tabsStore.subscribe(() => {
-      setTabsState({ ...tabsStore.getState() });
-    });
     const unsubscribeDocuments = documentStore.subscribe(() => {
       setDocumentVersion((current) => current + 1);
     });
@@ -673,7 +671,6 @@ export function App(): ReactElement {
 
     return () => {
       unsubscribeWorkspace();
-      unsubscribeTabs();
       unsubscribeDocuments();
       unsubscribeActivity();
       cancelPendingRichTextSync();
@@ -681,11 +678,10 @@ export function App(): ReactElement {
   }, [markAgentActivity, cancelPendingRichTextSync]);
 
   useEffect(() => {
-    const activeTab = tabsState.activeTabPath;
-    if (activeTab !== workspace.activeFilePath) {
-      workspaceStore.setActiveFilePath(activeTab);
+    if (activeTabPath !== workspace.activeFilePath) {
+      workspaceStore.setActiveFilePath(activeTabPath);
     }
-  }, [tabsState.activeTabPath, workspace.activeFilePath]);
+  }, [activeTabPath, workspace.activeFilePath]);
 
   useEffect(() => {
     const host = editorHostRef.current;
@@ -966,13 +962,6 @@ export function App(): ReactElement {
     };
   }, [workspace.files, workspace.name, workspace.rootPath]);
 
-  const statusLeft = activePath
-    ? formatDisplayPath(activePath, workspace.rootPath, workspace.name)
-    : workspace.rootPath
-      ? t("status.noFileSelected")
-      : t("status.noWorkspaceOpen");
-  const statusRight = activeDocument ? formatSaveStatusForDocument(activeDocument, locale) : "";
-
   return (
     <div className="app-container">
       <div className="workspace-header" data-tauri-drag-region>
@@ -1003,17 +992,7 @@ export function App(): ReactElement {
           >
             <FolderOpen className="lucide-icon" size={16} aria-hidden="true" />
           </Button>
-          <Button
-            id="btn-save"
-            type="button"
-            variant="ghost"
-            size="icon"
-            title={t("toolbar.save")}
-            disabled={!activePath || !documentStore.isDirty(activePath)}
-            onClick={() => void saveActiveDocument()}
-          >
-            <Save className="lucide-icon" size={16} aria-hidden="true" />
-          </Button>
+          <SaveButton />
         </span>
         <span className="workspace-actions">
           <ViewModeSwitch mode={viewMode} onChange={handleViewModeChange} />
@@ -1061,12 +1040,10 @@ export function App(): ReactElement {
         />
         <div className="editor-area">
           <div className="tabs-bar-container">
-            <TabsBarView
-              tabs={tabsState.openTabs}
+            <TabsBar
               onTabClick={handleTabClick}
               onTabClose={handleTabClose}
               onTabsClose={handleTabsClose}
-              onTabReorder={(from, to) => tabsStore.reorderTab(from, to)}
               onNewFile={() => newUntitledFile()}
             />
           </div>
@@ -1103,17 +1080,7 @@ export function App(): ReactElement {
         </div>
       </div>
 
-      <div className="status-bar">
-        <span className="status-left">{statusLeft}</span>
-        <span className="status-right">
-          <span className="document-status">{statusRight}</span>
-          <span
-            id="agent-dot"
-            className={cn("agent-dot", agentState !== "idle" && agentState)}
-            title="Agent Activity"
-          />
-        </span>
-      </div>
+      <StatusBar agentState={agentState} />
       <div className="toast-host" aria-live="polite">
         {toast ? (
           <div className={cn("toast", `toast-${toast.kind}`, toast.visible && "visible")}>

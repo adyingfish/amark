@@ -2,6 +2,8 @@ import type { CSSProperties } from "react";
 import type { DocumentRecord } from "../features/document/document-types";
 import { type Locale, translate } from "../features/i18n/translations";
 
+export type AgentState = "idle" | "active" | "cooldown";
+
 export function formatRelativeTime(timestamp: number, locale: Locale): string {
   const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
   if (seconds < 5) return translate("time.now", locale);
