@@ -308,32 +308,66 @@ export async function deleteFileInTree(path: string): Promise<void> {
 // (e.g. a multi-file move) collapses into a single refreshWorkspace() instead
 // of one scan per event; file-changed events are deduped per path so rapid
 // re-saves of the same file only trigger one read.
-const WORKSPACE_REFRESH_DEBOUNCE_MS = 200;
-const FILE_CHANGED_DEBOUNCE_MS = 200;
+// The trailing window alone has no upper bound, so a sustained stream of
+// events firing faster than the window (e.g. a large external sync) would
+// keep deferring the effect indefinitely; WATCHER_MAX_WAIT_MS caps how long
+// it can be postponed once one is pending.
+const WATCHER_DEBOUNCE_MS = 200;
+const WATCHER_MAX_WAIT_MS = 1000;
+
+// Trailing debounce with a maxWait ceiling: schedule() keeps postponing fn
+// by debounceMs, but once a call is pending it always fires by maxWaitMs.
+function createDebouncer(fn: () => void, debounceMs: number, maxWaitMs: number) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let maxTimer: ReturnType<typeof setTimeout> | undefined;
+  function run(): void {
+    if (timer !== undefined) clearTimeout(timer);
+    if (maxTimer !== undefined) clearTimeout(maxTimer);
+    timer = undefined;
+    maxTimer = undefined;
+    fn();
+  }
+  function schedule(): void {
+    if (timer !== undefined) clearTimeout(timer);
+    timer = setTimeout(run, debounceMs);
+    if (maxTimer === undefined) {
+      maxTimer = setTimeout(run, maxWaitMs);
+    }
+  }
+  function cancel(): void {
+    if (timer !== undefined) clearTimeout(timer);
+    if (maxTimer !== undefined) clearTimeout(maxTimer);
+    timer = undefined;
+    maxTimer = undefined;
+  }
+  return { schedule, cancel };
+}
 
 export async function setupWorkspaceListeners(): Promise<() => void> {
   const unlistens: (() => void)[] = [];
 
-  let refreshTimer: ReturnType<typeof setTimeout> | undefined;
-  function scheduleWorkspaceRefresh(): void {
-    if (refreshTimer !== undefined) clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(() => {
-      refreshTimer = undefined;
-      refreshWorkspace();
-    }, WORKSPACE_REFRESH_DEBOUNCE_MS);
-  }
+  const workspaceRefreshDebouncer = createDebouncer(
+    refreshWorkspace,
+    WATCHER_DEBOUNCE_MS,
+    WATCHER_MAX_WAIT_MS,
+  );
+  const scheduleWorkspaceRefresh = workspaceRefreshDebouncer.schedule;
 
-  const fileChangedTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const fileChangedDebouncers = new Map<string, ReturnType<typeof createDebouncer>>();
   function scheduleFileChanged(path: string): void {
-    const pending = fileChangedTimers.get(path);
-    if (pending !== undefined) clearTimeout(pending);
-    fileChangedTimers.set(
-      path,
-      setTimeout(() => {
-        fileChangedTimers.delete(path);
-        handleWorkspaceFileChanged(path);
-      }, FILE_CHANGED_DEBOUNCE_MS),
-    );
+    let debouncer = fileChangedDebouncers.get(path);
+    if (!debouncer) {
+      debouncer = createDebouncer(
+        () => {
+          fileChangedDebouncers.delete(path);
+          handleWorkspaceFileChanged(path);
+        },
+        WATCHER_DEBOUNCE_MS,
+        WATCHER_MAX_WAIT_MS,
+      );
+      fileChangedDebouncers.set(path, debouncer);
+    }
+    debouncer.schedule();
   }
 
   // File changed event
@@ -382,9 +416,9 @@ export async function setupWorkspaceListeners(): Promise<() => void> {
 
   // Return cleanup function
   return () => {
-    if (refreshTimer !== undefined) clearTimeout(refreshTimer);
-    for (const timer of fileChangedTimers.values()) clearTimeout(timer);
-    fileChangedTimers.clear();
+    workspaceRefreshDebouncer.cancel();
+    for (const debouncer of fileChangedDebouncers.values()) debouncer.cancel();
+    fileChangedDebouncers.clear();
     for (const unlisten of unlistens) {
       unlisten();
     }
