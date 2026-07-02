@@ -100,12 +100,17 @@ pub async fn start_watch_workspace(
 ) -> Result<bool, String> {
     show_hidden_state.store(show_hidden, Ordering::Relaxed);
     let path = PathBuf::from(&root_path);
-    match start_workspace_watch(
-        app,
-        path,
-        watchers.inner(),
-        show_hidden_state.inner().clone(),
-    ) {
+    let watchers = watchers.inner().clone();
+    let show_hidden_state = show_hidden_state.inner().clone();
+    // Registration now walks the workspace tree itself (see file_watch.rs),
+    // so it's no longer a cheap call: keep it off the async runtime thread.
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        start_workspace_watch(app, path, &watchers, show_hidden_state)
+    })
+    .await
+    .map_err(|e| format!("Failed to start workspace watch: {}", e))?;
+
+    match result {
         Ok(_) => Ok(true),
         Err(e) => {
             eprintln!("Failed to start workspace watch: {}", e);
