@@ -70,7 +70,7 @@ pub fn scan_workspace_directory(
     let root_path = normalize_workspace_root(root_path);
     let name = workspace_name(&root_path);
 
-    let files = scan_directory_recursive(&root_path, &root_path, show_hidden)?;
+    let files = scan_directory_recursive(&root_path, show_hidden)?;
 
     Ok(WorkspaceScanResult {
         root_path: root_path.to_string_lossy().to_string(),
@@ -81,7 +81,6 @@ pub fn scan_workspace_directory(
 
 fn scan_directory_recursive(
     current_path: &Path,
-    root_path: &Path,
     show_hidden: bool,
 ) -> Result<Vec<WorkspaceFileNode>, WorkspaceError> {
     let mut entries: Vec<WorkspaceFileNode> = Vec::new();
@@ -112,7 +111,7 @@ fn scan_directory_recursive(
 
         if metadata.is_dir() {
             // Recursively scan subdirectory
-            match scan_directory_recursive(&path, root_path, show_hidden) {
+            match scan_directory_recursive(&path, show_hidden) {
                 Ok(children) if !children.is_empty() => {
                     entries.push(WorkspaceFileNode {
                         path: path.to_string_lossy().to_string(),
@@ -296,4 +295,118 @@ pub async fn save_file_content(path: &Path, content: &str) -> Result<(), Workspa
         .map_err(|e| WorkspaceError::WriteFailed {
             reason: e.to_string(),
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn workspace_name_uses_final_path_component() {
+        assert_eq!(workspace_name(Path::new("/home/user/my-notes")), "my-notes");
+    }
+
+    // `file_name()` returns `None` for `/`, `.`, `..` and similar roots —
+    // must not panic or surface an empty name to the UI.
+    #[test]
+    fn workspace_name_falls_back_when_no_file_name_component() {
+        assert_eq!(workspace_name(Path::new("/")), "workspace");
+    }
+
+    #[test]
+    fn should_skip_entry_hides_dotfiles_unless_shown() {
+        assert!(should_skip_entry(".git", false));
+        assert!(!should_skip_entry(".git", true));
+    }
+
+    // Generated-noise directories are always excluded, independent of the
+    // show-hidden preference.
+    #[test]
+    fn should_skip_entry_always_excludes_generated_dirs() {
+        for name in ["node_modules", "target", "dist", "build"] {
+            assert!(should_skip_entry(name, false));
+            assert!(should_skip_entry(name, true));
+        }
+    }
+
+    #[test]
+    fn should_skip_entry_keeps_normal_names() {
+        assert!(!should_skip_entry("notes.md", false));
+        assert!(!should_skip_entry("notes.md", true));
+    }
+
+    #[test]
+    fn is_markdown_file_accepts_known_extensions_case_insensitively() {
+        for ext in ["md", "markdown", "mdown", "mkd", "MD", "Markdown"] {
+            assert!(is_markdown_file(Path::new(&format!("note.{}", ext))));
+        }
+    }
+
+    #[test]
+    fn is_markdown_file_rejects_other_or_missing_extensions() {
+        assert!(!is_markdown_file(Path::new("note.txt")));
+        assert!(!is_markdown_file(Path::new("README")));
+    }
+
+    #[test]
+    fn sanitize_entry_name_trims_surrounding_whitespace() {
+        assert_eq!(sanitize_entry_name("  notes  ").unwrap(), "notes");
+    }
+
+    #[test]
+    fn sanitize_entry_name_rejects_empty_or_whitespace_only() {
+        assert!(matches!(
+            sanitize_entry_name("   "),
+            Err(WorkspaceError::NameEmpty)
+        ));
+    }
+
+    #[test]
+    fn sanitize_entry_name_rejects_path_separators() {
+        assert!(matches!(
+            sanitize_entry_name("a/b"),
+            Err(WorkspaceError::NameHasSeparator)
+        ));
+        assert!(matches!(
+            sanitize_entry_name("a\\b"),
+            Err(WorkspaceError::NameHasSeparator)
+        ));
+    }
+
+    #[test]
+    fn sanitize_entry_name_rejects_dot_and_dotdot() {
+        assert!(matches!(
+            sanitize_entry_name("."),
+            Err(WorkspaceError::NameInvalid)
+        ));
+        assert!(matches!(
+            sanitize_entry_name(".."),
+            Err(WorkspaceError::NameInvalid)
+        ));
+    }
+
+    #[test]
+    fn sanitize_markdown_name_appends_md_when_missing() {
+        assert_eq!(sanitize_markdown_name("notes").unwrap(), "notes.md");
+    }
+
+    #[test]
+    fn sanitize_markdown_name_keeps_existing_markdown_extension() {
+        assert_eq!(
+            sanitize_markdown_name("notes.markdown").unwrap(),
+            "notes.markdown"
+        );
+    }
+
+    #[test]
+    fn sanitize_markdown_name_propagates_name_validation_errors() {
+        assert!(matches!(
+            sanitize_markdown_name(""),
+            Err(WorkspaceError::NameEmpty)
+        ));
+        assert!(matches!(
+            sanitize_markdown_name("a/b"),
+            Err(WorkspaceError::NameHasSeparator)
+        ));
+    }
 }

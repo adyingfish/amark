@@ -34,7 +34,10 @@ pub type ShowHiddenState = Arc<Mutex<HashMap<String, ShowHiddenFlag>>>;
 /// `window_label`. Shared by the `start_watch_workspace` and
 /// `set_show_hidden_files` commands so both read/write the same per-window
 /// flag regardless of call order.
-pub fn get_or_create_show_hidden_flag(state: &ShowHiddenState, window_label: &str) -> ShowHiddenFlag {
+pub fn get_or_create_show_hidden_flag(
+    state: &ShowHiddenState,
+    window_label: &str,
+) -> ShowHiddenFlag {
     state
         .lock()
         .unwrap()
@@ -60,7 +63,7 @@ pub struct FileRemovedEvent {
 }
 
 /// Check if a path is a Markdown file
-fn is_markdown_file(path: &PathBuf) -> bool {
+fn is_markdown_file(path: &Path) -> bool {
     path.extension()
         .and_then(|ext| ext.to_str())
         .map(|ext| {
@@ -77,7 +80,7 @@ fn is_markdown_file(path: &PathBuf) -> bool {
 /// Generated-noise directories are excluded structurally, at watch
 /// registration time (see `WATCH_EXCLUDED_DIRS`), so events from inside them
 /// never reach this filter in the first place.
-fn should_watch_path(path: &PathBuf, show_hidden: bool) -> bool {
+fn should_watch_path(path: &Path, show_hidden: bool) -> bool {
     if !show_hidden
         && path
             .file_name()
