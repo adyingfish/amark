@@ -66,7 +66,6 @@ import { tabsStore } from "../features/tabs/tabs-store";
 import type { TabState } from "../features/tabs/tabs-types";
 import { activityStore } from "../features/activity/activity-store";
 import type { RecentChangedFile } from "../features/workspace/workspace-types";
-import { buildHtmlDocument, printHtmlDocument } from "../features/export/export-document";
 import { applyTheme, loadSavedTheme } from "../themes/theme-manager";
 import { setupKeyboardShortcuts } from "../ui/keyboard-shortcuts";
 import { setupSplitDivider, type SplitDividerHandle } from "../ui/split-divider";
@@ -532,7 +531,7 @@ export function App(): ReactElement {
     openFileFromTree(filePath, fileName);
   }, []);
 
-  const buildExportDocument = useCallback((): string | null => {
+  const buildExportDocument = useCallback(async (): Promise<string | null> => {
     const editor = editorRef.current;
     if (!editor) return null;
 
@@ -546,12 +545,13 @@ export function App(): ReactElement {
 
     const bodyHtml = editor.getHTML();
     const title = (active.split(/[/\\]/).pop() || "document").replace(/\.md$/i, "");
+    const { buildHtmlDocument } = await import("../features/export/export-document");
     return buildHtmlDocument(bodyHtml, title);
   }, []);
 
   const handleExport = useCallback(
     async (format: "html" | "pdf"): Promise<void> => {
-      const doc = buildExportDocument();
+      const doc = await buildExportDocument();
       if (!doc) return;
 
       if (format === "html") {
@@ -567,6 +567,7 @@ export function App(): ReactElement {
       }
 
       if (!handledNatively) {
+        const { printHtmlDocument } = await import("../features/export/export-document");
         printHtmlDocument(doc);
       }
     },
