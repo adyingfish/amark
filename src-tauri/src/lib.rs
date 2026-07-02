@@ -356,7 +356,7 @@ pub fn run() {
     let app_state: AppState = Arc::new(Mutex::new(HashMap::new()));
     let watcher_state: WorkspaceWatcherState = Arc::new(Mutex::new(HashMap::new()));
     let launch_files: LaunchFiles = Arc::new(Mutex::new(Vec::new()));
-    let show_hidden_state: ShowHiddenState = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let show_hidden_state: ShowHiddenState = Arc::new(Mutex::new(HashMap::new()));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_window_state::Builder::default().build())
@@ -404,6 +404,16 @@ pub fn run() {
                 if let Some(state) = window.try_state::<AppState>() {
                     let mut guard = state.lock().unwrap();
                     guard.remove(window.label());
+                }
+                // A closed window's watcher (and its background thread) and
+                // show-hidden flag are otherwise never reclaimed — nothing
+                // on the frontend calls stop_watch_workspace on window
+                // close, only on an explicit workspace close.
+                if let Some(watchers) = window.try_state::<WorkspaceWatcherState>() {
+                    services::file_watch::stop_workspace_watch(window.label(), watchers.inner());
+                }
+                if let Some(show_hidden) = window.try_state::<ShowHiddenState>() {
+                    show_hidden.lock().unwrap().remove(window.label());
                 }
             }
         })
