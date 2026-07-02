@@ -145,6 +145,11 @@ const dictionary = {
   "dialog.unsavedChanges.save": { zh: "保存", en: "Save" },
   "dialog.unsavedChanges.discard": { zh: "丢弃", en: "Discard" },
   "toast.openFile.error": { zh: "无法打开该文件", en: "Could not open that file" },
+  "toast.fileRef.notMarkdown": {
+    zh: "非 Markdown 文件，暂不支持在编辑器内跳转预览",
+    en: "Not a Markdown file — preview isn't supported for this type",
+  },
+  "toast.fileRef.notFound": { zh: "未找到该文件", en: "File not found" },
   "toast.themeImported": { zh: "主题导入成功", en: "Theme imported" },
   "toast.themeImportFailed": { zh: "主题导入失败", en: "Theme import failed" },
   "toast.pdfExported": { zh: "PDF 导出成功", en: "PDF exported" },

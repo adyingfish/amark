@@ -12,6 +12,7 @@ import {
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { homeDir } from "@tauri-apps/api/path";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import { FolderOpen, PanelLeft } from "lucide-react";
@@ -52,8 +53,12 @@ import {
   toggleShowHiddenFiles,
 } from "../features/workspace/workspace-controller";
 import {
+  findFileNode,
   isDescendantPath,
+  isHomeRelativePath,
   isPathWithinRoot,
+  resolveHomeRelativePath,
+  resolveLocalFileReference,
   resolveLocalMarkdownLink,
   rewriteDescendantPath,
 } from "../features/workspace/workspace-utils";
@@ -80,6 +85,11 @@ import {
   isOpenLinkModifier,
   openExternalLink,
 } from "../services/external-link";
+import {
+  findFileRefAtPosition,
+  isBareAllCapsRef,
+  looksLikeMarkdownRef,
+} from "../services/file-ref";
 import type { EditorViewMode } from "../ui/view-mode-switch";
 
 interface LaunchFile {
@@ -259,25 +269,11 @@ export function App(): ReactElement {
     updateDocumentContent(active, event.currentTarget.value);
   }, []);
 
-  const handleSourceLinkClick = useCallback((event: ReactMouseEvent<HTMLTextAreaElement>): void => {
-    const source = sourceViewRef.current;
-    if (!source || !isOpenLinkModifier(event.nativeEvent)) return;
-
-    const url = findLinkAtPosition(source.value, source.selectionStart);
-    if (!url) return;
-
-    event.preventDefault();
-    openExternalLink(url);
-  }, []);
-
-  const openLocalMarkdownLink = useCallback(
-    (href: string): void => {
-      const active = activePathRef.current;
-      if (!active || active.startsWith("untitled://")) return;
-
-      const targetPath = resolveLocalMarkdownLink(active, href);
-      if (!targetPath) return;
-
+  // Shared tail end of "open a locally-resolved path": in-workspace files
+  // become a tab, anything outside the workspace root opens in a new window.
+  // Used by both Markdown link clicks and `@path/to/file` reference clicks.
+  const openResolvedPath = useCallback(
+    (targetPath: string): void => {
       const rootPath = workspaceStore.getRootPath();
       if (rootPath && isPathWithinRoot(rootPath, targetPath)) {
         const fileName = targetPath.split(/[/\\]/).pop() ?? targetPath;
@@ -293,11 +289,98 @@ export function App(): ReactElement {
     [showToast, t],
   );
 
+  const openLocalMarkdownLink = useCallback(
+    (href: string): void => {
+      const active = activePathRef.current;
+      if (!active || active.startsWith("untitled://")) return;
+
+      const targetPath = resolveLocalMarkdownLink(active, href);
+      if (!targetPath) return;
+
+      openResolvedPath(targetPath);
+    },
+    [openResolvedPath],
+  );
+
+  const openFileRef = useCallback(
+    (path: string): void => {
+      if (isHomeRelativePath(path)) {
+        homeDir()
+          .then((home) => openResolvedPath(resolveHomeRelativePath(home, path)))
+          .catch((error) => {
+            console.error("Failed to resolve home directory:", error);
+            showToast(t("toast.openFile.error"), "error");
+          });
+        return;
+      }
+
+      // Non-Markdown refs (e.g. `@package.json`) are never opened in this
+      // Markdown editor — see services/file-ref.ts's looksLikeMarkdownRef for
+      // why. A bare ALL-CAPS ref like `@README` is let through optimistically
+      // (isBareAllCapsRef below) but has no extension to confirm it's really
+      // Markdown, so it gets an existence check instead of a free pass.
+      if (!looksLikeMarkdownRef(path)) {
+        showToast(t("toast.fileRef.notMarkdown"), "error");
+        return;
+      }
+
+      const active = activePathRef.current;
+      if (!active || active.startsWith("untitled://")) return;
+
+      // A bare ALL-CAPS ref like `@README` has no extension to confirm it's
+      // Markdown; looksLikeMarkdownRef() lets it through by assuming the
+      // author meant the ".md" file of that name, so resolve that instead of
+      // the literal extensionless path.
+      const isBareAllCaps = isBareAllCapsRef(path);
+      const targetPath = resolveLocalFileReference(active, isBareAllCaps ? `${path}.md` : path);
+      if (!targetPath) return;
+
+      if (isBareAllCaps) {
+        const rootPath = workspaceStore.getRootPath();
+        const inWorkspace = rootPath !== null && isPathWithinRoot(rootPath, targetPath);
+        if (inWorkspace && !findFileNode(workspaceStore.getFiles(), targetPath)) {
+          showToast(t("toast.fileRef.notFound"), "error");
+          return;
+        }
+      }
+
+      openResolvedPath(targetPath);
+    },
+    [openResolvedPath, showToast, t],
+  );
+
+  const handleSourceLinkClick = useCallback(
+    (event: ReactMouseEvent<HTMLTextAreaElement>): void => {
+      const source = sourceViewRef.current;
+      if (!source || !isOpenLinkModifier(event.nativeEvent)) return;
+
+      const url = findLinkAtPosition(source.value, source.selectionStart);
+      if (url) {
+        event.preventDefault();
+        openExternalLink(url);
+        return;
+      }
+
+      const path = findFileRefAtPosition(source.value, source.selectionStart);
+      if (path) {
+        event.preventDefault();
+        openFileRef(path);
+      }
+    },
+    [openFileRef],
+  );
+
   const handlePreviewLinkClick = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>): void => {
-      const anchor = (event.target as HTMLElement | null)?.closest("a");
+      const target = event.target as HTMLElement | null;
+      const anchor = target?.closest("a");
+      // `data-type="file-ref"` is the rendered DOM contract for `@path/to/file`
+      // references (see milkdown-file-ref-node.ts) — read as a plain
+      // attribute, same as `href` on `<a>`, so this stays editor-agnostic.
+      const fileRefSpan = !anchor ? target?.closest('span[data-type="file-ref"]') : null;
       const url = anchor?.getAttribute("href");
-      if (!url) return;
+      if (!anchor && !fileRefSpan) return;
+      if (anchor && !url) return;
 
       if (viewModeRef.current !== "wysiwyg") {
         event.preventDefault();
@@ -309,14 +392,19 @@ export function App(): ReactElement {
       event.preventDefault();
       event.stopPropagation();
 
-      if (/^https?:\/\//i.test(url)) {
-        openExternalLink(url);
+      if (url) {
+        if (/^https?:\/\//i.test(url)) {
+          openExternalLink(url);
+          return;
+        }
+        openLocalMarkdownLink(url);
         return;
       }
 
-      openLocalMarkdownLink(url);
+      const path = fileRefSpan?.getAttribute("data-path");
+      if (path) openFileRef(path);
     },
-    [openLocalMarkdownLink],
+    [openLocalMarkdownLink, openFileRef],
   );
 
   const applyMarkdownToRichText = useCallback((markdown: string): void => {

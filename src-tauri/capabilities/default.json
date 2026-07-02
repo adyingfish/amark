@@ -5,6 +5,7 @@
   "windows": ["main", "main-*"],
   "permissions": [
     "core:default",
+    "core:path:default",
     "core:window:allow-start-dragging",
     "core:window:allow-set-focus",
     "core:window:allow-minimize",

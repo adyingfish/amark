@@ -13,6 +13,10 @@ import { DOMSerializer, type Node as ProseMirrorNode } from "@milkdown/kit/prose
 import type { EditorView } from "@milkdown/kit/prose/view";
 import remarkBreaks from "remark-breaks";
 import { buildStringifyOptions } from "./milkdown-stringify-options";
+import { remarkFileRef } from "./remark-file-ref";
+import { remarkCommentBlock } from "./remark-comment-block";
+import { fileRefSchema } from "./milkdown-file-ref-node";
+import { commentBlockSchema } from "./milkdown-comment-block-node";
 import { commonmark } from "@milkdown/kit/preset/commonmark";
 import { gfm } from "@milkdown/kit/preset/gfm";
 import { history } from "@milkdown/kit/plugin/history";
@@ -82,8 +86,15 @@ export class MilkdownAdapter implements EditorAdapter {
         ctx.set(rootCtx, container);
         ctx.set(defaultValueCtx, "");
 
-        // 让单个换行(\n)也按换行显示，而非按 CommonMark 默认折叠为空格
-        ctx.set(remarkPluginsCtx, [{ plugin: remarkBreaks, options: {} }]);
+        // 让单个换行(\n)也按换行显示，而非按 CommonMark 默认折叠为空格。
+        // remarkCommentBlock 必须排在 commonmark 预设的内置 html 转换器之前
+        // （通过 .use(commonmark) 在下方追加实现，见该文件顶部注释），
+        // 否则块级 HTML 注释会先被包进段落，无法再识别为独立块。
+        ctx.set(remarkPluginsCtx, [
+          { plugin: remarkBreaks, options: {} },
+          { plugin: remarkCommentBlock, options: {} },
+          { plugin: remarkFileRef, options: {} },
+        ]);
 
         // 修正 Milkdown 回写 Markdown 时对源文件的意外改写：保留 "-" 列表符号、
         // 不把裸链接包成 <...>、避免紧凑列表被序列化成松散列表。详见
@@ -106,6 +117,8 @@ export class MilkdownAdapter implements EditorAdapter {
       })
       .use(commonmark)
       .use(gfm)
+      .use(fileRefSchema)
+      .use(commentBlockSchema)
       .use(history)
       .use(listener)
       .use(clipboard)

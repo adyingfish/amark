@@ -135,6 +135,52 @@ body {
   cursor: pointer;
 }
 
+/* `@relative/path` file references (see milkdown-file-ref-node.ts) */
+#editor .ProseMirror span[data-type="file-ref"] {
+  color: var(--link-color);
+  background: var(--code-bg);
+  font-family: "SF Mono", "Fira Code", Menlo, monospace;
+  font-size: 0.875em;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.editor-wrapper.link-modifier-active #editor .ProseMirror span[data-type="file-ref"] {
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* Non-Markdown refs (e.g. `@package.json`, `@notes.txt`) aren't opened in
+   this Markdown editor — Ctrl+click shows a hint instead of navigating (see
+   App.tsx's openFileRef). Muted + dashed to read as "not a real jump" even
+   before the click. */
+#editor .ProseMirror span[data-type="file-ref"][data-md="false"] {
+  color: var(--text-muted);
+  border: 1px dashed var(--border-color);
+  background: transparent;
+}
+
+.editor-wrapper.link-modifier-active
+  #editor
+  .ProseMirror
+  span[data-type="file-ref"][data-md="false"] {
+  text-decoration: none;
+}
+
+/* Block-level HTML comments (see remark-comment-block.ts / milkdown-comment-block-node.ts):
+   shown as a muted, read-only callout instead of vanishing or rendering as
+   raw text. */
+#editor .ProseMirror div[data-type="comment-block"] {
+  margin: 1em 0;
+  padding: 8px 12px;
+  border: 1px dashed var(--border-color);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 0.875em;
+  font-family: "SF Mono", "Fira Code", Menlo, monospace;
+  white-space: pre-wrap;
+}
+
 #editor .ProseMirror strong {
   font-weight: 600;
 }
