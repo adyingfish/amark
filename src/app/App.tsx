@@ -100,6 +100,7 @@ const SIDEBAR_COLLAPSED_STORAGE_KEY = "amark-sidebar-collapsed";
 const RICH_TEXT_PREVIEW_SYNC_DEBOUNCE_MS = 200;
 
 const subscribeTabs = (onChange: () => void) => tabsStore.subscribe(onChange);
+const subscribeDocuments = (onChange: () => void) => documentStore.subscribe(onChange);
 
 function loadSavedViewMode(): EditorViewMode {
   const saved = localStorage.getItem(VIEW_MODE_STORAGE_KEY);
@@ -118,7 +119,6 @@ export function App(): ReactElement {
   const { locale, t } = useI18n();
   const [workspace, setWorkspace] = useState<WorkspaceState>(() => workspaceStore.getState());
   const activeTabPath = useSyncExternalStore(subscribeTabs, () => tabsStore.getActiveTabPath());
-  const [documentVersion, setDocumentVersion] = useState(0);
   const [recentChanges, setRecentChanges] = useState<RecentChangedFile[]>(() => [
     ...activityStore.getRecentChanges(),
   ]);
@@ -154,7 +154,9 @@ export function App(): ReactElement {
   viewModeRef.current = viewMode;
 
   const activePath = workspace.activeFilePath;
-  const activeDocument = activePath ? documentStore.getDocument(activePath) : undefined;
+  const activeDocument = useSyncExternalStore(subscribeDocuments, () =>
+    activePath ? documentStore.getDocument(activePath) : undefined,
+  );
   const hasDocument = activeTabPath !== null;
 
   const showToast = useCallback((message: string, kind: ToastKind): void => {
@@ -369,6 +371,32 @@ export function App(): ReactElement {
     }
     applyMarkdownToSourceView(document.markdown);
   }, [applyMarkdownToRichText, applyMarkdownToSourceView, cancelPendingRichTextSync]);
+
+  // Reads the active path straight from workspaceStore (not the `workspace`
+  // state) so this runs identically whether it's triggered by an active-file
+  // switch or by a raw document-store event. Same previousActiveFilePathRef
+  // switch check and debounce scheduling as before.
+  const syncActiveDocumentFromStores = useCallback((): void => {
+    const activeFilePath = workspaceStore.getActiveFilePath();
+    const isDocumentSwitch = previousActiveFilePathRef.current !== activeFilePath;
+    previousActiveFilePathRef.current = activeFilePath;
+
+    if (isDocumentSwitch) {
+      syncEditorContent();
+      return;
+    }
+
+    // Same document, content changed (typing). Keep the source view caught
+    // up immediately, but debounce pushing it into the read-only rich-text
+    // preview so fast typing doesn't re-render Milkdown on every keystroke.
+    const document = activeFilePath ? documentStore.getDocument(activeFilePath) : undefined;
+    if (!document || !document.isLoaded) return;
+
+    applyMarkdownToSourceView(document.markdown);
+    if (viewModeRef.current !== "source") {
+      scheduleRichTextSync(document.markdown);
+    }
+  }, [syncEditorContent, applyMarkdownToSourceView, scheduleRichTextSync]);
 
   const handleTabClick = useCallback((filePath: string): void => {
     tabsStore.activateTab(filePath);
@@ -661,9 +689,6 @@ export function App(): ReactElement {
     const unsubscribeWorkspace = workspaceStore.subscribe(() => {
       setWorkspace({ ...workspaceStore.getState() });
     });
-    const unsubscribeDocuments = documentStore.subscribe(() => {
-      setDocumentVersion((current) => current + 1);
-    });
     const unsubscribeActivity = activityStore.subscribe(() => {
       setRecentChanges([...activityStore.getRecentChanges()]);
       markAgentActivity();
@@ -671,7 +696,6 @@ export function App(): ReactElement {
 
     return () => {
       unsubscribeWorkspace();
-      unsubscribeDocuments();
       unsubscribeActivity();
       cancelPendingRichTextSync();
     };
@@ -914,33 +938,19 @@ export function App(): ReactElement {
     }
   }, [hasDocument, syncEditorContent, viewMode]);
 
+  // Active-file switches go through workspaceStore, which doesn't touch
+  // documentStore when the target tab is already loaded, so this stays keyed
+  // on workspace.activeFilePath.
   useEffect(() => {
-    const activeFilePath = workspace.activeFilePath;
-    const isDocumentSwitch = previousActiveFilePathRef.current !== activeFilePath;
-    previousActiveFilePathRef.current = activeFilePath;
+    syncActiveDocumentFromStores();
+  }, [workspace.activeFilePath, syncActiveDocumentFromStores]);
 
-    if (isDocumentSwitch) {
-      syncEditorContent();
-      return;
-    }
-
-    // Same document, content changed (typing). Keep the source view caught
-    // up immediately, but debounce pushing it into the read-only rich-text
-    // preview so fast typing doesn't re-render Milkdown on every keystroke.
-    const document = activeFilePath ? documentStore.getDocument(activeFilePath) : undefined;
-    if (!document || !document.isLoaded) return;
-
-    applyMarkdownToSourceView(document.markdown);
-    if (viewModeRef.current !== "source") {
-      scheduleRichTextSync(document.markdown);
-    }
-  }, [
-    documentVersion,
-    workspace.activeFilePath,
-    syncEditorContent,
-    applyMarkdownToSourceView,
-    scheduleRichTextSync,
-  ]);
+  // Document edits (typing, save status, external reloads) don't produce
+  // JSX, so consume the store directly here instead of relaying through
+  // React state just to re-trigger this effect.
+  useEffect(() => {
+    return documentStore.subscribe(syncActiveDocumentFromStores);
+  }, [syncActiveDocumentFromStores]);
 
   useEffect(() => {
     return () => {
