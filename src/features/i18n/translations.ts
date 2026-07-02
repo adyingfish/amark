@@ -151,6 +151,34 @@ const dictionary = {
   "toast.pdfExportFailed": { zh: "PDF 导出失败", en: "PDF export failed" },
   "file.dialog.markdown": { zh: "Markdown 文件", en: "Markdown" },
   "file.dialog.allFiles": { zh: "所有文件", en: "All Files" },
+
+  // Workspace error codes (see src-tauri WorkspaceError) → translated toast text
+  "error.workspace.nameEmpty": { zh: "名称不能为空", en: "Name cannot be empty" },
+  "error.workspace.nameHasSeparator": {
+    zh: "名称不能包含路径分隔符",
+    en: "Name cannot contain a path separator",
+  },
+  "error.workspace.nameInvalid": { zh: "名称无效", en: "Invalid name" },
+  "error.workspace.cannotLocateParentDir": {
+    zh: "无法定位所在目录",
+    en: "Could not locate the parent directory",
+  },
+  "error.workspace.notMarkdownFile": {
+    zh: "只能删除 Markdown 文件",
+    en: "Only Markdown files can be deleted",
+  },
+  "error.workspace.notADirectory": {
+    zh: "所选路径不是文件夹",
+    en: "Selected path is not a directory",
+  },
+  "error.workspace.createFileFailed": { zh: "创建文件失败", en: "Failed to create file" },
+  "error.workspace.createDirFailed": { zh: "创建文件夹失败", en: "Failed to create folder" },
+  "error.workspace.renameFailed": { zh: "重命名失败", en: "Failed to rename" },
+  "error.workspace.deleteFailed": { zh: "删除失败", en: "Failed to delete" },
+  "error.workspace.readFailed": { zh: "读取文件失败", en: "Failed to read file" },
+  "error.workspace.writeFailed": { zh: "写入文件失败", en: "Failed to write file" },
+  "error.workspace.readDirFailed": { zh: "读取目录失败", en: "Failed to read directory" },
+  "error.workspace.unexpected": { zh: "操作失败", en: "Operation failed" },
 } satisfies Record<string, Record<Locale, string>>;
 
 export type TranslationKey = keyof typeof dictionary;
@@ -175,4 +203,26 @@ export function unsavedChangesCountMessage(count: number, locale: Locale): strin
   return locale === "zh"
     ? `有 ${count} 个文件未保存的更改，是否保存？`
     : `There are ${count} files with unsaved changes. Do you want to save them?`;
+}
+
+export function workspaceEntryExistsMessage(
+  kind: "file" | "folder" | "any",
+  name: string,
+  locale: Locale,
+): string {
+  const kindText =
+    kind === "file"
+      ? locale === "zh"
+        ? "文件"
+        : "file"
+      : kind === "folder"
+        ? locale === "zh"
+          ? "文件夹"
+          : "folder"
+        : locale === "zh"
+          ? "文件或文件夹"
+          : "file or folder";
+  return locale === "zh"
+    ? `已存在同名${kindText}：${name}`
+    : `A ${kindText} named "${name}" already exists`;
 }

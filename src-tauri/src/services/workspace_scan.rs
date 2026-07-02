@@ -1,4 +1,5 @@
 use crate::models::workspace_models::{FileNodeKind, WorkspaceFileNode, WorkspaceScanResult};
+use crate::services::workspace_error::{EntryKind, WorkspaceError};
 use std::path::{Path, PathBuf};
 
 /// On Windows, `std::fs::canonicalize` returns a verbatim (`\\?\…`) path. For a
@@ -44,13 +45,15 @@ fn workspace_name(root_path: &Path) -> String {
 /// Return canonical workspace identity without recursively building the file
 /// tree. Used by the folder picker path before the frontend performs the real
 /// scan with the current view preferences.
-pub fn describe_workspace_directory(root_path: &Path) -> Result<(String, String), String> {
+pub fn describe_workspace_directory(root_path: &Path) -> Result<(String, String), WorkspaceError> {
     let root_path = normalize_workspace_root(root_path);
     if !root_path.is_dir() {
-        return Err("Selected path is not a directory".to_string());
+        return Err(WorkspaceError::NotADirectory);
     }
 
-    std::fs::read_dir(&root_path).map_err(|e| format!("Failed to read directory: {}", e))?;
+    std::fs::read_dir(&root_path).map_err(|e| WorkspaceError::ReadDirFailed {
+        reason: e.to_string(),
+    })?;
     Ok((
         root_path.to_string_lossy().to_string(),
         workspace_name(&root_path),
@@ -63,7 +66,7 @@ pub fn describe_workspace_directory(root_path: &Path) -> Result<(String, String)
 pub fn scan_workspace_directory(
     root_path: &Path,
     show_hidden: bool,
-) -> Result<WorkspaceScanResult, String> {
+) -> Result<WorkspaceScanResult, WorkspaceError> {
     let root_path = normalize_workspace_root(root_path);
     let name = workspace_name(&root_path);
 
@@ -80,11 +83,13 @@ fn scan_directory_recursive(
     current_path: &Path,
     root_path: &Path,
     show_hidden: bool,
-) -> Result<Vec<WorkspaceFileNode>, String> {
+) -> Result<Vec<WorkspaceFileNode>, WorkspaceError> {
     let mut entries: Vec<WorkspaceFileNode> = Vec::new();
 
     let dir_entries =
-        std::fs::read_dir(current_path).map_err(|e| format!("Failed to read directory: {}", e))?;
+        std::fs::read_dir(current_path).map_err(|e| WorkspaceError::ReadDirFailed {
+            reason: e.to_string(),
+        })?;
 
     for entry in dir_entries {
         let entry = match entry {
@@ -170,16 +175,16 @@ fn is_markdown_file(path: &Path) -> bool {
 
 /// Validate a user-supplied name for any filesystem entry: non-empty, no path
 /// separators (no traversal / nested creation) and not `.`/`..`.
-fn sanitize_entry_name(name: &str) -> Result<&str, String> {
+fn sanitize_entry_name(name: &str) -> Result<&str, WorkspaceError> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
-        return Err("名称不能为空".to_string());
+        return Err(WorkspaceError::NameEmpty);
     }
     if trimmed.contains('/') || trimmed.contains('\\') {
-        return Err("名称不能包含路径分隔符".to_string());
+        return Err(WorkspaceError::NameHasSeparator);
     }
     if matches!(trimmed, "." | "..") {
-        return Err("名称无效".to_string());
+        return Err(WorkspaceError::NameInvalid);
     }
     Ok(trimmed)
 }
@@ -188,7 +193,7 @@ fn sanitize_entry_name(name: &str) -> Result<&str, String> {
 ///
 /// Rejects empty names and path separators (no traversal / nested creation),
 /// and appends a `.md` extension when the name has no Markdown extension yet.
-fn sanitize_markdown_name(name: &str) -> Result<String, String> {
+fn sanitize_markdown_name(name: &str) -> Result<String, WorkspaceError> {
     let trimmed = sanitize_entry_name(name)?;
     if is_markdown_file(Path::new(trimmed)) {
         Ok(trimmed.to_string())
@@ -198,24 +203,37 @@ fn sanitize_markdown_name(name: &str) -> Result<String, String> {
 }
 
 /// Create an empty Markdown file `name` inside `parent`, returning its full path.
-pub fn create_markdown_file(parent: &Path, name: &str) -> Result<std::path::PathBuf, String> {
+pub fn create_markdown_file(
+    parent: &Path,
+    name: &str,
+) -> Result<std::path::PathBuf, WorkspaceError> {
     let file_name = sanitize_markdown_name(name)?;
     let target = parent.join(&file_name);
     if target.exists() {
-        return Err(format!("已存在同名文件：{}", file_name));
+        return Err(WorkspaceError::EntryExists {
+            kind: EntryKind::File,
+            name: file_name,
+        });
     }
-    std::fs::write(&target, "").map_err(|e| format!("Failed to create file: {}", e))?;
+    std::fs::write(&target, "").map_err(|e| WorkspaceError::CreateFileFailed {
+        reason: e.to_string(),
+    })?;
     Ok(target)
 }
 
 /// Create an empty folder named `name` inside `parent`, returning its full path.
-pub fn create_directory(parent: &Path, name: &str) -> Result<std::path::PathBuf, String> {
+pub fn create_directory(parent: &Path, name: &str) -> Result<std::path::PathBuf, WorkspaceError> {
     let dir_name = sanitize_entry_name(name)?;
     let target = parent.join(dir_name);
     if target.exists() {
-        return Err(format!("已存在同名文件或文件夹：{}", dir_name));
+        return Err(WorkspaceError::EntryExists {
+            kind: EntryKind::Any,
+            name: dir_name.to_string(),
+        });
     }
-    std::fs::create_dir(&target).map_err(|e| format!("Failed to create folder: {}", e))?;
+    std::fs::create_dir(&target).map_err(|e| WorkspaceError::CreateDirFailed {
+        reason: e.to_string(),
+    })?;
     Ok(target)
 }
 
@@ -223,46 +241,59 @@ pub fn create_directory(parent: &Path, name: &str) -> Result<std::path::PathBuf,
 /// directory). Files are kept under the Markdown-name rules (`.md` is
 /// appended when missing); directories only get the generic name validation
 /// since they have no extension convention to enforce.
-pub fn rename_fs_entry(path: &Path, new_name: &str) -> Result<std::path::PathBuf, String> {
+pub fn rename_fs_entry(path: &Path, new_name: &str) -> Result<std::path::PathBuf, WorkspaceError> {
     let is_dir = path.is_dir();
     let entry_name = if is_dir {
         sanitize_entry_name(new_name)?.to_string()
     } else {
         sanitize_markdown_name(new_name)?
     };
-    let parent = path
-        .parent()
-        .ok_or_else(|| "无法定位所在目录".to_string())?;
+    let parent = path.parent().ok_or(WorkspaceError::CannotLocateParentDir)?;
     let target = parent.join(&entry_name);
     if target == path {
         return Ok(target);
     }
     if target.exists() {
-        let label = if is_dir { "文件夹" } else { "文件" };
-        return Err(format!("已存在同名{}：{}", label, entry_name));
+        let kind = if is_dir {
+            EntryKind::Folder
+        } else {
+            EntryKind::File
+        };
+        return Err(WorkspaceError::EntryExists {
+            kind,
+            name: entry_name,
+        });
     }
-    std::fs::rename(path, &target).map_err(|e| format!("Failed to rename: {}", e))?;
+    std::fs::rename(path, &target).map_err(|e| WorkspaceError::RenameFailed {
+        reason: e.to_string(),
+    })?;
     Ok(target)
 }
 
 /// Delete a Markdown file.
-pub fn delete_markdown_file(path: &Path) -> Result<(), String> {
+pub fn delete_markdown_file(path: &Path) -> Result<(), WorkspaceError> {
     if !is_markdown_file(path) {
-        return Err("只能删除 Markdown 文件".to_string());
+        return Err(WorkspaceError::NotMarkdownFile);
     }
-    std::fs::remove_file(path).map_err(|e| format!("Failed to delete file: {}", e))
+    std::fs::remove_file(path).map_err(|e| WorkspaceError::DeleteFailed {
+        reason: e.to_string(),
+    })
 }
 
 /// Read a file's content
-pub async fn read_file_content(path: &Path) -> Result<String, String> {
+pub async fn read_file_content(path: &Path) -> Result<String, WorkspaceError> {
     tokio::fs::read_to_string(path)
         .await
-        .map_err(|e| format!("Failed to read file: {}", e))
+        .map_err(|e| WorkspaceError::ReadFailed {
+            reason: e.to_string(),
+        })
 }
 
 /// Save content to a file
-pub async fn save_file_content(path: &Path, content: &str) -> Result<(), String> {
+pub async fn save_file_content(path: &Path, content: &str) -> Result<(), WorkspaceError> {
     tokio::fs::write(path, content)
         .await
-        .map_err(|e| format!("Failed to write file: {}", e))
+        .map_err(|e| WorkspaceError::WriteFailed {
+            reason: e.to_string(),
+        })
 }
