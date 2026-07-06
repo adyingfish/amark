@@ -49,6 +49,28 @@ describe("resolveLocalImagePath", () => {
     expect(resolveLocalImagePath("./a.png", null)).toBeNull();
   });
 
+  it("resolves relative paths against a UNC base (WSL share on Windows)", () => {
+    const uncBase = "\\\\wsl.localhost\\Ubuntu\\home\\user\\notes";
+    expect(resolveLocalImagePath("./docs/a.png", uncBase)).toBe(
+      "//wsl.localhost/Ubuntu/home/user/notes/docs/a.png",
+    );
+    expect(resolveLocalImagePath("../a.png", uncBase)).toBe(
+      "//wsl.localhost/Ubuntu/home/user/a.png",
+    );
+  });
+
+  it("clamps .. at the UNC share, never popping server or share", () => {
+    expect(resolveLocalImagePath("../../../../a.png", "\\\\server\\share\\docs")).toBe(
+      "//server/share/a.png",
+    );
+  });
+
+  it("keeps absolute UNC paths as-is", () => {
+    expect(resolveLocalImagePath("\\\\server\\share\\a.png", null)).toBe(
+      "\\\\server\\share\\a.png",
+    );
+  });
+
   it("decodes percent-encoded names", () => {
     expect(resolveLocalImagePath("my%20image.png", POSIX_BASE)).toBe(
       "/home/user/notes/my image.png",
