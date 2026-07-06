@@ -13,6 +13,10 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 // followed by ":\" or ":/" is a Windows drive, not a scheme — checked first.
 const SCHEME_PATTERN = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
 const WINDOWS_DRIVE_PATTERN = /^[a-zA-Z]:[\\/]/;
+// UNC path (\\server\share\...) — how Windows reaches WSL files
+// (\\wsl.localhost\<distro>\...), so documents opened from a WSL share hit
+// this on the packaged Windows build.
+const UNC_PATTERN = /^[\\/]{2}/;
 
 // Directory of the active document, or null when there is none (untitled
 // buffer, no document open). Module-level because toDOM has no access to app
@@ -53,7 +57,7 @@ export function resolveLocalImagePath(src: string, base: string | null): string 
     // not percent-encoded; use as-is
   }
 
-  if (WINDOWS_DRIVE_PATTERN.test(path) || path.startsWith("/")) {
+  if (WINDOWS_DRIVE_PATTERN.test(path) || UNC_PATTERN.test(path) || path.startsWith("/")) {
     return path;
   }
 
@@ -76,11 +80,23 @@ export function resolveImageSrc(src: string): string {
 // output separator — Windows accepts them, and convertFileSrc only needs a
 // well-formed absolute path.
 function joinAndNormalize(base: string, relative: string): string {
-  const segments = base.split(/[\\/]+/);
-  // A POSIX base ("/home/u/docs") splits to a leading "" — keep it so the
-  // result stays rooted; a Windows base keeps its "C:" head segment.
-  const root = segments[0];
-  const stack = segments.slice(1).filter((segment) => segment.length > 0);
+  const segments = base.split(/[\\/]+/).filter((segment) => segment.length > 0);
+  // The root is the boundary ".." can never pop past: "" for a POSIX base
+  // ("/home/u" stays rooted at "/"), the "C:" head segment for a Windows
+  // drive, and server + share for a UNC base ("\\wsl.localhost\Ubuntu\..."),
+  // since a share is the topmost thing a UNC path can address.
+  let root: string;
+  let stack: string[];
+  if (UNC_PATTERN.test(base)) {
+    root = `//${segments.slice(0, 2).join("/")}`;
+    stack = segments.slice(2);
+  } else if (WINDOWS_DRIVE_PATTERN.test(base)) {
+    root = segments[0];
+    stack = segments.slice(1);
+  } else {
+    root = "";
+    stack = segments;
+  }
 
   for (const segment of relative.split(/[\\/]+/)) {
     if (segment === "" || segment === ".") continue;
