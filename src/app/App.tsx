@@ -85,6 +85,7 @@ import {
   isOpenLinkModifier,
   openExternalLink,
 } from "../services/external-link";
+import { setImageBaseDirFromFile } from "../services/image-src";
 import {
   findFileRefAtPosition,
   isBareAllCapsRef,
@@ -410,6 +411,9 @@ export function App(): ReactElement {
   const applyMarkdownToRichText = useCallback((markdown: string): void => {
     const editor = editorRef.current;
     if (editor && editor.getContent() !== markdown) {
+      // Relative image paths render against the active document's directory
+      // (see services/image-src.ts); keep it current before Milkdown re-renders.
+      setImageBaseDirFromFile(workspaceStore.getActiveFilePath());
       editor.setContent(markdown);
     }
   }, []);
@@ -691,15 +695,15 @@ export function App(): ReactElement {
     if (!active) return null;
 
     const document = documentStore.getDocument(active);
-    if (document && editor.getContent() !== document.markdown) {
-      editor.setContent(document.markdown);
+    if (document) {
+      applyMarkdownToRichText(document.markdown);
     }
 
     const bodyHtml = editor.getHTML();
     const title = (active.split(/[/\\]/).pop() || "document").replace(/\.md$/i, "");
     const { buildHtmlDocument } = await import("../features/export/export-document");
     return buildHtmlDocument(bodyHtml, title);
-  }, []);
+  }, [applyMarkdownToRichText]);
 
   const handleExport = useCallback(
     async (format: "html" | "pdf"): Promise<void> => {

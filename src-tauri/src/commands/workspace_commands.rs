@@ -11,7 +11,7 @@ use crate::services::workspace_scan::{
 };
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
-use tauri::{AppHandle, State, WebviewWindow};
+use tauri::{AppHandle, Manager, State, WebviewWindow};
 use tauri_plugin_dialog::DialogExt;
 
 /// Open a folder dialog and return the selected workspace identity
@@ -72,10 +72,17 @@ pub async fn open_workspace_folder(
 /// Scan a workspace directory and return the file tree
 #[tauri::command]
 pub async fn scan_workspace(
+    app: AppHandle,
     root_path: String,
     show_hidden: bool,
 ) -> Result<WorkspaceScanResult, WorkspaceError> {
     let path = PathBuf::from(&root_path);
+    // Let the webview load files under this workspace through the asset
+    // protocol (local images referenced by documents). Scope grants are
+    // additive and idempotent; failure only means those images won't render.
+    if let Err(e) = app.asset_protocol_scope().allow_directory(&path, true) {
+        eprintln!("Failed to extend asset protocol scope: {e}");
+    }
     tauri::async_runtime::spawn_blocking(move || scan_workspace_directory(&path, show_hidden))
         .await
         .map_err(|e| WorkspaceError::Unexpected {
@@ -85,8 +92,16 @@ pub async fn scan_workspace(
 
 /// Read a file's content
 #[tauri::command]
-pub async fn read_file(path: String) -> Result<FileContentResult, WorkspaceError> {
+pub async fn read_file(app: AppHandle, path: String) -> Result<FileContentResult, WorkspaceError> {
     let file_path = PathBuf::from(&path);
+    // Covers documents opened outside any workspace (file association,
+    // standalone open): grant asset-protocol access to the document's
+    // directory so its relative-path images can render.
+    if let Some(parent) = file_path.parent() {
+        if let Err(e) = app.asset_protocol_scope().allow_directory(parent, true) {
+            eprintln!("Failed to extend asset protocol scope: {e}");
+        }
+    }
     let content = read_file_content(&file_path).await?;
     Ok(FileContentResult { path, content })
 }

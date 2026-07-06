@@ -17,6 +17,7 @@ import { remarkFileRef } from "./remark-file-ref";
 import { remarkCommentBlock } from "./remark-comment-block";
 import { fileRefSchema } from "./milkdown-file-ref-node";
 import { commentBlockSchema } from "./milkdown-comment-block-node";
+import { imageSrcSchema } from "./milkdown-image-src";
 import { commonmark } from "@milkdown/kit/preset/commonmark";
 import { gfm } from "@milkdown/kit/preset/gfm";
 import { history } from "@milkdown/kit/plugin/history";
@@ -117,6 +118,9 @@ export class MilkdownAdapter implements EditorAdapter {
       })
       .use(commonmark)
       .use(gfm)
+      // 后注册的同名 node 覆盖 commonmark 内置的 image schema（Object.fromEntries
+      // 取最后一项），从而让本地图片路径经 asset protocol 渲染。
+      .use(imageSrcSchema)
       .use(fileRefSchema)
       .use(commentBlockSchema)
       .use(history)
