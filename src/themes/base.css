@@ -181,6 +181,13 @@ body {
   white-space: pre-wrap;
 }
 
+/* LaTeX formulas (see milkdown-math-node.ts): KaTeX renders the glyphs itself,
+   this only supplies block-level spacing consistent with other block nodes. */
+#editor .ProseMirror div[data-type="math-block"] {
+  margin: 1em 0;
+  overflow-x: auto;
+}
+
 #editor .ProseMirror strong {
   font-weight: 600;
 }

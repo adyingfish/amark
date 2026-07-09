@@ -12,12 +12,14 @@ import {
 import { DOMSerializer, type Node as ProseMirrorNode } from "@milkdown/kit/prose/model";
 import type { EditorView } from "@milkdown/kit/prose/view";
 import remarkBreaks from "remark-breaks";
+import remarkMath from "remark-math";
 import { buildStringifyOptions } from "./milkdown-stringify-options";
 import { remarkFileRef } from "./remark-file-ref";
 import { remarkCommentBlock } from "./remark-comment-block";
 import { fileRefSchema } from "./milkdown-file-ref-node";
 import { commentBlockSchema } from "./milkdown-comment-block-node";
 import { htmlImageSchema, imageSrcSchema } from "./milkdown-image-src";
+import { mathBlockSchema, mathInlineSchema } from "./milkdown-math-node";
 import { commonmark } from "@milkdown/kit/preset/commonmark";
 import { gfm } from "@milkdown/kit/preset/gfm";
 import { history } from "@milkdown/kit/plugin/history";
@@ -93,6 +95,7 @@ export class MilkdownAdapter implements EditorAdapter {
         // 否则块级 HTML 注释会先被包进段落，无法再识别为独立块。
         ctx.set(remarkPluginsCtx, [
           { plugin: remarkBreaks, options: {} },
+          { plugin: remarkMath, options: {} },
           { plugin: remarkCommentBlock, options: {} },
           { plugin: remarkFileRef, options: {} },
         ]);
@@ -125,6 +128,8 @@ export class MilkdownAdapter implements EditorAdapter {
       .use(htmlImageSchema)
       .use(fileRefSchema)
       .use(commentBlockSchema)
+      .use(mathInlineSchema)
+      .use(mathBlockSchema)
       .use(history)
       .use(listener)
       .use(clipboard)

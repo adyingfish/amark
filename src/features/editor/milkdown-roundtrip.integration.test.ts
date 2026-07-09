@@ -21,11 +21,13 @@ import { commonmark } from "@milkdown/kit/preset/commonmark";
 import { gfm } from "@milkdown/kit/preset/gfm";
 import { getMarkdown } from "@milkdown/kit/utils";
 import remarkBreaks from "remark-breaks";
+import remarkMath from "remark-math";
 import { buildStringifyOptions } from "./milkdown-stringify-options";
 import { remarkFileRef } from "./remark-file-ref";
 import { remarkCommentBlock } from "./remark-comment-block";
 import { fileRefSchema } from "./milkdown-file-ref-node";
 import { commentBlockSchema } from "./milkdown-comment-block-node";
+import { mathBlockSchema, mathInlineSchema } from "./milkdown-math-node";
 
 async function createEditor(
   markdown: string,
@@ -38,6 +40,7 @@ async function createEditor(
       ctx.set(defaultValueCtx, markdown);
       ctx.set(remarkPluginsCtx, [
         { plugin: remarkBreaks, options: {} },
+        { plugin: remarkMath, options: {} },
         { plugin: remarkCommentBlock, options: {} },
         { plugin: remarkFileRef, options: {} },
       ]);
@@ -47,6 +50,8 @@ async function createEditor(
     .use(gfm)
     .use(fileRefSchema)
     .use(commentBlockSchema)
+    .use(mathInlineSchema)
+    .use(mathBlockSchema)
     .create();
   return { container, editor };
 }
@@ -189,5 +194,29 @@ describe("milkdown real round-trip", () => {
 
     expect(html).not.toContain('data-type="comment-block"');
     expect(html).toContain('data-type="html"');
+  });
+
+  it("round-trips inline math unchanged", async () => {
+    expect(await roundtrip("energy: $E=mc^2$")).toBe("energy: $E=mc^2$\n");
+  });
+
+  it("renders inline math as KaTeX output in the DOM", async () => {
+    const html = await renderHtml("energy: $E=mc^2$");
+
+    expect(html).toContain('data-type="math-inline"');
+    expect(html).toContain("katex");
+    expect(html).not.toContain("$E=mc^2$");
+  });
+
+  it("round-trips a math block unchanged", async () => {
+    const src = "$$\na^2 + b^2 = c^2\n$$";
+    expect(await roundtrip(src)).toBe(`${src}\n`);
+  });
+
+  it("renders a math block as KaTeX output in the DOM", async () => {
+    const html = await renderHtml("$$\na^2 + b^2 = c^2\n$$");
+
+    expect(html).toContain('data-type="math-block"');
+    expect(html).toContain("katex");
   });
 });
