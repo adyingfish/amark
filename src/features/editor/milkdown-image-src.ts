@@ -46,11 +46,12 @@ export const htmlImageSchema = htmlSchema.extendSchema((prev) => (ctx) => {
     ...base,
     toDOM: (node) => {
       const value = (node.attrs.value as string).trim();
-      if (!SINGLE_IMG_TAG_PATTERN.test(value)) return base.toDOM(node);
+      // htmlSchema always defines toDOM; the preset's NodeSpec type just marks it optional.
+      if (!SINGLE_IMG_TAG_PATTERN.test(value)) return base.toDOM!(node);
 
       // DOMParser inert document: nothing loads or executes during parsing.
       const parsed = new DOMParser().parseFromString(value, "text/html").querySelector("img");
-      if (!parsed) return base.toDOM(node);
+      if (!parsed) return base.toDOM!(node);
 
       const attrs: Record<string, string> = {
         "data-type": "html-img",
