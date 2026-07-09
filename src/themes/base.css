@@ -493,6 +493,9 @@ body.theme-literary {
 
 body.theme-literary #editor .ProseMirror {
   line-height: 1.9;
+  /* 段落级断行评分与行尾标点悬挂（悬挂仅 WebKit 生效），见 theme-academic 处说明 */
+  text-wrap: pretty;
+  hanging-punctuation: allow-end;
 }
 
 body.theme-literary #editor .ProseMirror strong {
@@ -584,6 +587,11 @@ body.theme-academic #editor .ProseMirror {
   line-height: 1.7;
   text-align: justify;
   hyphens: auto;
+  /* 段落级断行评分：Chromium(WebView2) 优化段末 4 行消灭孤词，
+     WebKit(WebKitGTK) 做整段优化，双端行为有差异属预期 */
+  text-wrap: pretty;
+  /* 行尾标点悬挂：目前仅 WebKit 实现，Chromium 端静默忽略 */
+  hanging-punctuation: allow-end;
 }
 
 /* LaTeX 章节标题：衬线粗体，无下划线分隔线 */
