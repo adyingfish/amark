@@ -10,7 +10,7 @@
 // 含允许列表之外元素的段落原样保留浏览器换行。
 
 import { hyphenateSync } from "hyphen/en";
-import { breakLines } from "./kp-core";
+import { FORCED_BREAK, breakLines } from "./kp-core";
 import {
   buildItems,
   type InlineToken,
@@ -178,7 +178,7 @@ export class TypesetController {
     const lines = breakLines(items, lineWidth);
     if (!lines) return; // 不可行（如超长不可断内容）→ 保留浏览器换行
 
-    renderLines(p, items, lines, segElements);
+    correctResiduals(renderLines(p, items, lines, segElements, lineWidth));
   }
 
   private ensureMeasureHost(): HTMLElement {
@@ -325,12 +325,23 @@ function collectTokens(p: HTMLElement): CollectedTokens | null {
   return walk(p) ? { tokens, segElements } : null;
 }
 
+interface RenderedLine {
+  el: HTMLElement;
+  /** 该行内容应有的总宽度（悬挂行比版心宽出悬挂量）。 */
+  target: number;
+  /** 行内可参与残差均摊的间隙 span（空格 / margin 间隙）。 */
+  gaps: HTMLElement[];
+  /** 末行与硬换行前的行按自然宽度排，不做残差校正。 */
+  corrigible: boolean;
+}
+
 function renderLines(
   p: HTMLElement,
   items: TypesetItem[],
   lines: { breakIndex: number; ratio: number }[],
   segElements: HTMLElement[],
-): void {
+  lineWidth: number,
+): RenderedLine[] {
   // seg → 包裹链（文本节点父元素向上到 p，不含 p），用于按原样式重建行内容。
   const chains = segElements.map((el) => {
     const chain: HTMLElement[] = [];
@@ -341,11 +352,13 @@ function renderLines(
   });
 
   p.replaceChildren();
+  const rendered: RenderedLine[] = [];
   let prevBreak = -1;
 
   for (const line of lines) {
     const lineEl = document.createElement("span");
     lineEl.className = "amark-tl-line";
+    const gaps: HTMLElement[] = [];
 
     // 连续同 seg 的内容合并进同一个包裹链实例，避免逐字包 span。
     let currentSeg = -1;
@@ -380,11 +393,14 @@ function renderLines(
           space.style.wordSpacing = `${width - natural}px`;
           space.textContent = " ";
           innerFor(item.seg).appendChild(space);
-        } else if (width !== 0) {
+          gaps.push(space);
+        } else {
           // CJK/中西间隙：空 span 的 margin-left 承载正负间距（挤压为负）。
+          // 宽度为 0 也要占位，供残差校正均摊。
           const gap = document.createElement("span");
           gap.style.marginLeft = `${width}px`;
           innerFor(item.seg).appendChild(gap);
+          gaps.push(gap);
         }
       }
       // 行中 penalty 不产出内容（未断于其上时宽度为 0）。
@@ -396,7 +412,43 @@ function renderLines(
       innerFor(breakItem.seg).append(breakItem.text);
     }
 
+    // 目标宽度：普通行/连字符行为版心宽（连字符文本已把 penalty 宽度渲染回
+    // 行内）；悬挂行（负宽 penalty、无补渲文本）比版心宽出悬挂量。
+    let target = lineWidth;
+    if (breakItem?.type === "penalty" && !breakItem.text) target -= breakItem.width;
+    const corrigible = !(breakItem?.type === "penalty" && breakItem.cost <= FORCED_BREAK);
+
     p.appendChild(lineEl);
+    rendered.push({ el: lineEl, target, gaps, corrigible });
     prevBreak = line.breakIndex;
   }
+  return rendered;
+}
+
+/**
+ * 逐行残差校正：KP 的预算基于逐段测量之和，而最终渲染还叠加合字、字距、
+ * 亚像素舍入等引擎内部效应，行宽会差出可见的一两个像素。渲染后用同一
+ * 布局引擎实测每行内容宽度，把与目标的差值均摊进该行的间隙，精确闭合。
+ * 先批量读、后批量写，整段只多一次布局。
+ */
+function correctResiduals(rendered: RenderedLine[]): void {
+  const range = document.createRange();
+  const residuals = rendered.map((line) => {
+    if (!line.corrigible || line.gaps.length === 0) return 0;
+    range.selectNodeContents(line.el);
+    return line.target - range.getBoundingClientRect().width;
+  });
+
+  rendered.forEach((line, i) => {
+    const residual = residuals[i]!;
+    if (Math.abs(residual) < 0.25) return;
+    const delta = residual / line.gaps.length;
+    for (const gap of line.gaps) {
+      if (gap.textContent === " ") {
+        gap.style.wordSpacing = `${parseFloat(gap.style.wordSpacing) + delta}px`;
+      } else {
+        gap.style.marginLeft = `${parseFloat(gap.style.marginLeft) + delta}px`;
+      }
+    }
+  });
 }
