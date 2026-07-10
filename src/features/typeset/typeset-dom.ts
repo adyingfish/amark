@@ -29,12 +29,16 @@ export class TypesetController {
   private observedPm: HTMLElement | null = null;
   private active = false;
   private rebuildTimer: number | null = null;
+  /** 上次重建时的「主题|宽度|内容」签名，用于跳过无变化的重建。 */
+  private lastSignature = "";
 
   private readonly pmObserver = new MutationObserver(() => this.scheduleRebuild());
   private readonly bodyObserver = new MutationObserver(() => this.scheduleRebuild());
   private readonly resizeObserver = new ResizeObserver(() => this.scheduleRebuild());
   private readonly handleFontsLoaded = (): void => {
+    // 字体就位后旧测量作废，签名也要作废以强制重排。
     this.widthCache.clear();
+    this.lastSignature = "";
     this.scheduleRebuild();
   };
 
@@ -74,6 +78,7 @@ export class TypesetController {
     this.mirror?.remove();
     this.mirror = null;
     this.observedPm = null;
+    this.lastSignature = "";
   }
 
   private realProseMirror(): HTMLElement | null {
@@ -99,13 +104,24 @@ export class TypesetController {
     }
     if (pm !== this.observedPm) {
       this.pmObserver.disconnect();
-      this.pmObserver.observe(pm, {
-        childList: true,
-        characterData: true,
-        subtree: true,
-        attributes: true,
-      });
+      // 只看内容变化；attributes 会被 PM 聚焦类等抖动反复触发无谓重建。
+      this.pmObserver.observe(pm, { childList: true, characterData: true, subtree: true });
       this.observedPm = pm;
+    }
+
+    // 内容、可用宽度、主题都没变就跳过：把观察器杂音在这里消化掉，
+    // 不让它演变成镜像替换（以及随之而来的滚动扰动）。
+    const signature = `${document.body.className}|${this.host.clientWidth}|${pm.innerHTML}`;
+    if (signature === this.lastSignature && this.mirror?.isConnected) return;
+    this.lastSignature = signature;
+
+    // 镜像整体换新可能让滚动容器（分屏是 #editor，仅预览是 .editor-wrapper）
+    // 的滚动位置被浏览器钳制或锚定复位；先记录、排版完成后恢复。
+    const scrollers: [HTMLElement, number, number][] = [];
+    for (let el: HTMLElement | null = this.host; el; el = el.parentElement) {
+      if (el.scrollTop !== 0 || el.scrollLeft !== 0) {
+        scrollers.push([el, el.scrollTop, el.scrollLeft]);
+      }
     }
 
     this.mirror?.remove();
@@ -118,6 +134,11 @@ export class TypesetController {
 
     for (const p of Array.from(mirror.querySelectorAll<HTMLElement>("p"))) {
       this.typesetParagraph(p);
+    }
+
+    for (const [el, top, left] of scrollers) {
+      el.scrollTop = top;
+      el.scrollLeft = left;
     }
   }
 
