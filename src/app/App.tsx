@@ -37,6 +37,7 @@ import {
 } from "../features/i18n/translations";
 import { createMilkdownAdapter } from "../features/editor/milkdown-adapter";
 import type { EditorAdapter } from "../features/editor/editor-adapter";
+import { TypesetController } from "../features/typeset/typeset-dom";
 import { workspaceStore } from "../features/workspace/workspace-store";
 import type { WorkspaceFileNode, WorkspaceState } from "../features/workspace/workspace-types";
 import {
@@ -143,6 +144,7 @@ export function App(): ReactElement {
 
   const editorRef = useRef<EditorAdapter | null>(null);
   const editorHostRef = useRef<HTMLDivElement | null>(null);
+  const typesetRef = useRef<TypesetController | null>(null);
   const editorWrapperRef = useRef<HTMLDivElement | null>(null);
   const sourceViewRef = useRef<HTMLTextAreaElement | null>(null);
   const editorPanesRef = useRef<HTMLDivElement | null>(null);
@@ -1026,6 +1028,19 @@ export function App(): ReactElement {
       editorRef.current?.focus();
     }
   }, [hasDocument, syncEditorContent, viewMode]);
+
+  // 只读富文本预览（仅预览 / 分屏）启用 KP 排版镜像；可编辑视图必须停用，
+  // 否则镜像会盖住真实编辑器（见 typeset-dom.ts 顶部说明）。
+  useEffect(() => {
+    const host = editorHostRef.current;
+    if (!host) return;
+    if (hasDocument && (viewMode === "preview-only" || viewMode === "split")) {
+      const controller = (typesetRef.current ??= new TypesetController(host));
+      controller.enable();
+      return () => controller.disable();
+    }
+    typesetRef.current?.disable();
+  }, [hasDocument, viewMode]);
 
   // Active-file switches go through workspaceStore, which doesn't touch
   // documentStore when the target tab is already loaded, so this stays keyed

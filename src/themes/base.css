@@ -421,6 +421,21 @@ body {
   background: var(--selection-bg);
 }
 
+/* KP 排版镜像（src/features/typeset/typeset-dom.ts）：
+   激活时隐藏真实编辑器，只显示一次性镜像副本。 */
+.amark-typeset-active .ProseMirror:not(.amark-typeset-mirror) {
+  display: none;
+}
+
+/* KP 逐行渲染的行盒：断点与间隙均已显式计算，
+   须关闭浏览器自身的换行、空格折叠与标点悬挂，避免二次干预。 */
+.amark-typeset-mirror .amark-tl-line {
+  display: block;
+  text-align: left;
+  white-space: pre;
+  hanging-punctuation: none;
+}
+
 /* ======= THEMES ======= */
 
 body,
