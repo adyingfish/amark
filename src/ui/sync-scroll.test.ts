@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { setupSyncScroll } from "./sync-scroll";
 
 /** jsdom never lays out scrollable content, so scrollHeight/clientHeight are
@@ -23,38 +23,46 @@ function makeScrollable(scrollHeight: number, clientHeight: number): HTMLElement
 }
 
 describe("setupSyncScroll", () => {
-  it("mirrors scroll position by percentage in both directions", async () => {
+  it("mirrors user-driven scroll position by percentage in both directions", () => {
     const a = makeScrollable(2000, 1000); // range 1000
     const b = makeScrollable(3000, 1000); // range 2000
     setupSyncScroll(a, b);
 
+    a.dispatchEvent(new Event("wheel"));
     a.scrollTop = 500; // 50% of a's range
     a.dispatchEvent(new Event("scroll"));
     expect(b.scrollTop).toBe(1000); // 50% of b's range
 
-    // Let the re-entrancy guard clear before the next, independent scroll —
-    // mirrors two distinct user scroll gestures rather than one continuous one.
-    await new Promise(requestAnimationFrame);
-
+    b.dispatchEvent(new Event("wheel"));
     b.scrollTop = 2000; // 100% of b's range
     b.dispatchEvent(new Event("scroll"));
     expect(a.scrollTop).toBe(1000); // 100% of a's range
   });
 
-  it("does not loop forever when the mirrored scroll fires its own listener", () => {
+  it("ignores a mirrored scroll event instead of feeding it back", () => {
     const a = makeScrollable(2000, 1000);
     const b = makeScrollable(2000, 1000);
-    const bScrollSpy = vi.fn();
-    b.addEventListener("scroll", bScrollSpy);
+    setupSyncScroll(a, b);
+
+    a.dispatchEvent(new Event("wheel"));
+    a.scrollTop = 400;
+    a.dispatchEvent(new Event("scroll"));
+    expect(b.scrollTop).toBe(400);
+
+    // WebKitGTK may deliver this programmatic echo asynchronously. Because b
+    // never claimed drive, the echo must not be mirrored back to a.
+    b.dispatchEvent(new Event("scroll"));
+    expect(a.scrollTop).toBe(400);
+  });
+
+  it("ignores programmatic scroll events without a preceding user gesture", () => {
+    const a = makeScrollable(2000, 1000);
+    const b = makeScrollable(2000, 1000);
     setupSyncScroll(a, b);
 
     a.scrollTop = 400;
     a.dispatchEvent(new Event("scroll"));
-
-    // The listener writes b.scrollTop directly (no synthetic event), so only
-    // the externally added spy would fire if something dispatched on b.
-    expect(bScrollSpy).not.toHaveBeenCalled();
-    expect(b.scrollTop).toBe(400);
+    expect(b.scrollTop).toBe(0);
   });
 
   it("sync() snaps the target to the source's current ratio on demand", () => {
@@ -71,6 +79,7 @@ describe("setupSyncScroll", () => {
     const a = makeScrollable(2000, 1000);
     const b = makeScrollable(2000, 1000);
     const handle = setupSyncScroll(a, b);
+    a.dispatchEvent(new Event("wheel"));
     handle.destroy();
 
     a.scrollTop = 800;
