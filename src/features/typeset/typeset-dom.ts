@@ -42,8 +42,12 @@ export class TypesetController {
     this.scheduleRebuild();
   };
 
-  private readonly measureCanvas = document.createElement("canvas").getContext("2d");
-  /** font 短横线串 → (文本 → 宽度) 两级缓存。 */
+  /** 隐藏的 DOM 测量容器。不用 Canvas measureText：WebKitGTK 走 fontconfig
+      hinting 时 DOM 排版的字形推进宽度会被取整，与 Canvas 理想值每字差零点几
+      像素，整行累计肉眼可见（右边缘不齐、版心偏窄）。同一渲染管线的 DOM
+      测量才与最终渲染逐字一致。 */
+  private measureHost: HTMLElement | null = null;
+  /** font 简写串 → (文本 → 宽度) 两级缓存。 */
   private readonly widthCache = new Map<string, Map<string, number>>();
   private readonly hyphenCache = new Map<string, string[]>();
 
@@ -77,6 +81,8 @@ export class TypesetController {
     }
     this.mirror?.remove();
     this.mirror = null;
+    this.measureHost?.remove();
+    this.measureHost = null;
     this.observedPm = null;
     this.lastSignature = "";
   }
@@ -143,7 +149,6 @@ export class TypesetController {
   }
 
   private typesetParagraph(p: HTMLElement): void {
-    if (!this.measureCanvas) return;
     const cs = getComputedStyle(p);
     if (cs.textAlign !== "justify") return;
     if (cs.textIndent !== "0px") return;
@@ -152,10 +157,17 @@ export class TypesetController {
     if (!collected) return;
     const { tokens, segElements } = collected;
 
-    const lineWidth = p.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    // 版心取小数宽度：clientWidth 是取整值，会让每行系统性差 1px 以内。
+    const lineWidth =
+      p.getBoundingClientRect().width -
+      parseFloat(cs.paddingLeft) -
+      parseFloat(cs.paddingRight) -
+      parseFloat(cs.borderLeftWidth) -
+      parseFloat(cs.borderRightWidth);
     if (!(lineWidth > 0)) return;
 
-    const fonts = segElements.map((el) => canvasFont(getComputedStyle(el)));
+    const fonts = segElements.map((el) => measureFont(getComputedStyle(el)));
+    this.prewarmMeasurements(tokens, fonts);
     const measure = {
       text: (text: string, seg: number): number => this.measureText(text, fonts[seg]!),
       em: (seg: number): number => parseFloat(getComputedStyle(segElements[seg]!).fontSize),
@@ -169,6 +181,70 @@ export class TypesetController {
     renderLines(p, items, lines, segElements);
   }
 
+  private ensureMeasureHost(): HTMLElement {
+    if (this.measureHost?.isConnected) return this.measureHost;
+    const el = document.createElement("div");
+    // 放在 host 内以继承同样的 text-rendering 等文字渲染上下文；
+    // 负向偏移不会产生滚动溢出。
+    el.style.cssText =
+      "position:absolute;left:-99999px;top:0;visibility:hidden;white-space:pre;pointer-events:none;";
+    this.host.appendChild(el);
+    this.measureHost = el;
+    return el;
+  }
+
+  /** 把本段将要测量的候选文本一次性入列，单次布局读完，避免逐次强制回流。 */
+  private prewarmMeasurements(tokens: InlineToken[], fonts: string[]): void {
+    const wanted = new Map<string, Set<string>>(); // font → texts
+    const queue = (text: string, font: string): void => {
+      if (!text || this.widthCache.get(font)?.has(text)) return;
+      let texts = wanted.get(font);
+      if (!texts) {
+        texts = new Set();
+        wanted.set(font, texts);
+      }
+      texts.add(text);
+    };
+
+    for (const token of tokens) {
+      if ("br" in token) continue;
+      const font = fonts[token.seg]!;
+      queue(" ", font);
+      // 与 inline-items 的切分保持一致的近似：单码点（CJK 字/标点）、
+      // 空格分隔的西文词、可断词的音节与连字符。漏网文本走单次测量兜底。
+      for (const ch of token.text) queue(ch, font);
+      for (const word of token.text.split(/\s+/)) {
+        queue(word, font);
+        if (/^[A-Za-z]{6,}$/.test(word)) {
+          queue("-", font);
+          for (const syllable of this.hyphenate(word)) queue(syllable, font);
+        }
+      }
+    }
+    if (wanted.size === 0) return;
+
+    const host = this.ensureMeasureHost();
+    const spans: [string, string, HTMLSpanElement][] = [];
+    for (const [font, texts] of wanted) {
+      for (const text of texts) {
+        const span = document.createElement("span");
+        span.style.font = font;
+        span.textContent = text;
+        host.appendChild(span);
+        spans.push([font, text, span]);
+      }
+    }
+    for (const [font, text, span] of spans) {
+      let byText = this.widthCache.get(font);
+      if (!byText) {
+        byText = new Map();
+        this.widthCache.set(font, byText);
+      }
+      byText.set(text, span.getBoundingClientRect().width);
+    }
+    host.replaceChildren();
+  }
+
   private measureText(text: string, font: string): number {
     let byText = this.widthCache.get(font);
     if (!byText) {
@@ -177,9 +253,12 @@ export class TypesetController {
     }
     const cached = byText.get(text);
     if (cached !== undefined) return cached;
-    const ctx = this.measureCanvas!;
-    ctx.font = font;
-    const width = ctx.measureText(text).width;
+    const span = document.createElement("span");
+    span.style.font = font;
+    span.textContent = text;
+    this.ensureMeasureHost().appendChild(span);
+    const width = span.getBoundingClientRect().width;
+    span.remove();
     byText.set(text, width);
     return width;
   }
@@ -193,9 +272,9 @@ export class TypesetController {
   };
 }
 
-function canvasFont(cs: CSSStyleDeclaration): string {
-  // 只取 canvas font 简写稳定支持的四项；fontVariant 的复杂计算值会让
-  // 赋值静默失败、回退默认字体，导致测量整体错误。
+function measureFont(cs: CSSStyleDeclaration): string {
+  // font 简写只取稳定的四项（style/weight/size/family）；shorthand 会把
+  // line-height 重置为 normal，但测量只关心水平推进宽度，不受影响。
   return `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
 }
 
