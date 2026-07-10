@@ -1029,12 +1029,13 @@ export function App(): ReactElement {
     }
   }, [hasDocument, syncEditorContent, viewMode]);
 
-  // 只读富文本预览（仅预览 / 分屏）启用 KP 排版镜像；可编辑视图必须停用，
-  // 否则镜像会盖住真实编辑器（见 typeset-dom.ts 顶部说明）。
+  // KP 排版镜像只在「仅预览」启用；可视化编辑等可编辑视图必须停用
+  // （镜像会盖住真实编辑器，见 typeset-dom.ts 顶部说明），分屏也不启用，
+  // 避免与源码面板的滚动联动互相干扰。
   useEffect(() => {
     const host = editorHostRef.current;
     if (!host) return;
-    if (hasDocument && (viewMode === "preview-only" || viewMode === "split")) {
+    if (hasDocument && viewMode === "preview-only") {
       const controller = (typesetRef.current ??= new TypesetController(host));
       controller.enable();
       return () => controller.disable();
