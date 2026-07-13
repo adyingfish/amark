@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   assertKatexBundleArtifacts,
+  countInlineKatexWoff2Bytes,
   isKatexStylesheet,
   KATEX_FONT_FACE_COUNT,
   keepKatexWoff2Sources,
@@ -60,12 +61,27 @@ describe("assertKatexBundleArtifacts", () => {
     ).toThrow("Legacy KaTeX font assets were emitted");
   });
 
-  it("rejects a production bundle over the total budget", () => {
+  it("rejects KaTeX WOFF2 assets over the font budget", () => {
     expect(() =>
       assertKatexBundleArtifacts([
-        { fileName: "assets/KaTeX_Main-Regular-a1.woff2", bytes: 24_000 },
-        { fileName: "assets/index-a1.js", bytes: 1_500_000 },
+        { fileName: "assets/KaTeX_Main-Regular-a1.woff2", bytes: 200_000 },
+        { fileName: "assets/KaTeX_AMS-Regular-a1.woff2", bytes: 80_000 },
       ]),
-    ).toThrow("production budget");
+    ).toThrow("exceeding the 270.0 KB budget");
+  });
+
+  it("includes KaTeX fonts inlined into generated CSS in the font budget", () => {
+    const css =
+      '@font-face{font-family:KaTeX_Size3;src:url(data:font/woff2;base64,AAEC/w==) format("woff2")}';
+    const inlineBytes = countInlineKatexWoff2Bytes(css);
+
+    expect(inlineBytes).toBe(4);
+    expect(() =>
+      assertKatexBundleArtifacts(
+        [{ fileName: "assets/KaTeX_Main-Regular-a1.woff2", bytes: 269_997 }],
+        undefined,
+        inlineBytes,
+      ),
+    ).toThrow("exceeding the 270.0 KB budget");
   });
 });

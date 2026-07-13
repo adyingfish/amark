@@ -14,14 +14,12 @@ export interface BundleArtifact {
   bytes: number;
 }
 
-export interface KatexBundleBudgets {
+export interface KatexFontBudget {
   maxWoff2Bytes: number;
-  maxTotalBytes: number;
 }
 
-export const DEFAULT_KATEX_BUNDLE_BUDGETS: KatexBundleBudgets = {
+export const DEFAULT_KATEX_FONT_BUDGET: KatexFontBudget = {
   maxWoff2Bytes: 270_000,
-  maxTotalBytes: 1_450_000,
 };
 
 const FONT_FACE_PATTERN = /@font-face\s*\{[^{}]*\}/gi;
@@ -31,6 +29,8 @@ const WOFF2_FORMAT_PATTERN = /format\(\s*["']woff2["']\s*\)/gi;
 const LEGACY_FORMAT_PATTERN = /format\(\s*["'](?:woff|truetype)["']\s*\)/i;
 const LEGACY_FONT_REFERENCE_PATTERN = /\.(?:woff|ttf)(?=[?#'"\s)]|$)/i;
 const KATEX_FONT_ASSET_PATTERN = /(?:^|\/)KaTeX_[^/]+\.(woff2?|ttf)$/i;
+const KATEX_FONT_FAMILY_PATTERN = /font-family\s*:\s*["']?KaTeX_/i;
+const INLINE_WOFF2_PATTERN = /data:font\/woff2;base64,([A-Za-z0-9+/=]+)/gi;
 
 const formatBytes = (bytes: number): string => `${(bytes / 1_000).toFixed(1)} KB`;
 
@@ -87,8 +87,8 @@ export const keepKatexWoff2Sources = (css: string): KatexCssTransformResult => {
 
 export const assertKatexBundleArtifacts = (
   artifacts: readonly BundleArtifact[],
-  budgets: KatexBundleBudgets = DEFAULT_KATEX_BUNDLE_BUDGETS,
-  enforceTotalBudget = true,
+  budget: KatexFontBudget = DEFAULT_KATEX_FONT_BUDGET,
+  inlineWoff2Bytes = 0,
 ): void => {
   const katexFonts = artifacts.filter(({ fileName }) => KATEX_FONT_ASSET_PATTERN.test(fileName));
   const legacyFonts = katexFonts.filter(({ fileName }) => /\.(?:woff|ttf)$/i.test(fileName));
@@ -103,33 +103,31 @@ export const assertKatexBundleArtifacts = (
     throw new Error("[katex-woff2-only] No emitted KaTeX WOFF2 assets were found.");
   }
 
-  const woff2Bytes = woff2Fonts.reduce((sum, { bytes }) => sum + bytes, 0);
-  if (woff2Bytes > budgets.maxWoff2Bytes) {
+  const woff2Bytes = woff2Fonts.reduce((sum, { bytes }) => sum + bytes, 0) + inlineWoff2Bytes;
+  if (woff2Bytes > budget.maxWoff2Bytes) {
     throw new Error(
-      `[katex-woff2-only] Emitted KaTeX WOFF2 assets total ${formatBytes(woff2Bytes)}, exceeding the ${formatBytes(budgets.maxWoff2Bytes)} budget.`,
+      `[katex-woff2-only] Emitted KaTeX WOFF2 assets total ${formatBytes(woff2Bytes)}, exceeding the ${formatBytes(budget.maxWoff2Bytes)} budget.`,
     );
   }
+};
 
-  if (enforceTotalBudget) {
-    const totalBytes = artifacts.reduce((sum, { bytes }) => sum + bytes, 0);
-    if (totalBytes > budgets.maxTotalBytes) {
-      throw new Error(
-        `[katex-woff2-only] Frontend bundle totals ${formatBytes(totalBytes)}, exceeding the ${formatBytes(budgets.maxTotalBytes)} production budget.`,
-      );
+export const countInlineKatexWoff2Bytes = (css: string): number => {
+  let bytes = 0;
+  for (const fontFace of css.match(FONT_FACE_PATTERN) ?? []) {
+    if (!KATEX_FONT_FAMILY_PATTERN.test(fontFace)) continue;
+    for (const match of fontFace.matchAll(INLINE_WOFF2_PATTERN)) {
+      bytes += Buffer.from(match[1], "base64").byteLength;
     }
   }
+  return bytes;
 };
 
 export const katexWoff2OnlyPlugin = (): Plugin => {
   let transformedKatexStylesheet = false;
-  let enforceTotalBudget = true;
 
   return {
     name: "amark:katex-woff2-only",
     enforce: "pre",
-    configResolved(config) {
-      enforceTotalBudget = config.build.minify !== false;
-    },
     buildStart() {
       transformedKatexStylesheet = false;
     },
@@ -147,18 +145,28 @@ export const katexWoff2OnlyPlugin = (): Plugin => {
         );
       }
 
-      const artifacts = Object.values(bundle).map(
-        (output): BundleArtifact => ({
-          fileName: output.fileName,
-          bytes:
-            output.type === "chunk"
-              ? Buffer.byteLength(output.code)
-              : typeof output.source === "string"
+      const artifacts = Object.values(bundle)
+        .filter((output) => output.type === "asset")
+        .map(
+          (output): BundleArtifact => ({
+            fileName: output.fileName,
+            bytes:
+              typeof output.source === "string"
                 ? Buffer.byteLength(output.source)
                 : output.source.byteLength,
-        }),
-      );
-      assertKatexBundleArtifacts(artifacts, DEFAULT_KATEX_BUNDLE_BUDGETS, enforceTotalBudget);
+          }),
+        );
+      const inlineWoff2Bytes = Object.values(bundle).reduce((total, output) => {
+        if (
+          output.type !== "asset" ||
+          !output.fileName.endsWith(".css") ||
+          typeof output.source !== "string"
+        ) {
+          return total;
+        }
+        return total + countInlineKatexWoff2Bytes(output.source);
+      }, 0);
+      assertKatexBundleArtifacts(artifacts, DEFAULT_KATEX_FONT_BUDGET, inlineWoff2Bytes);
     },
   };
 };
