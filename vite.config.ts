@@ -2,10 +2,11 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite-plus";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { katexWoff2OnlyPlugin } from "./build/katex-woff2-only";
 
 // https://tauri.app/reference/config/#devurl
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [katexWoff2OnlyPlugin(), react(), tailwindcss()],
   staged: {
     "**/*.{css,html,js,json,jsx,md,mdx,ts,tsx,yaml,yml}": "vp check --fix",
   },

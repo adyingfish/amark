@@ -50,11 +50,7 @@ function reusableSource(node: MathSourceNode, raw: string): string {
   const lines = raw.split(/\r?\n/);
   const opening = lines[0] ?? "$$";
   const openingFence = opening.match(/^\$+/)?.[0] ?? "$$";
-  const closing =
-    lines
-      .at(-1)
-      ?.match(/\$+\s*$/)?.[0]
-      .trim() || openingFence;
+  const closing = lines[lines.length - 1]?.match(/\$+\s*$/)?.[0].trim() || openingFence;
   return opening + "\n" + (node.value ? node.value + "\n" : "") + closing;
 }
 
