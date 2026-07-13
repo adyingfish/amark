@@ -245,6 +245,40 @@ describe("milkdown real round-trip", () => {
     expect(html).not.toContain("$E=mc^2$");
   });
 
+  it("keeps a lone currency amount as text and escapes it when serializing", async () => {
+    const source = "The license costs $100.";
+    const html = await renderHtml(source);
+
+    expect(html).not.toContain('data-type="math-inline"');
+    expect(html).toContain("$100");
+    expect(await roundtrip(source)).toBe("The license costs \\$100.\n");
+  });
+
+  it("keeps explicitly escaped currency pairs as text", async () => {
+    const source = "Budget: \\$100 for design and \\$200 for review.";
+    const html = await renderHtml(source);
+
+    expect(html).not.toContain('data-type="math-inline"');
+    expect(html).toContain("$100");
+    expect(html).toContain("$200");
+    expect(await roundtrip(source)).toBe(`${source}\n`);
+  });
+
+  it("treats unescaped paired dollar amounts as math delimiters", async () => {
+    const html = await renderHtml("Budget: $100 for design and $200 for review.");
+
+    expect(html).toContain('data-type="math-inline"');
+    expect(html).toContain('data-value="100 for design and "');
+  });
+
+  it("keeps a deliberately closed numeric expression as inline math", async () => {
+    const source = "The exact result is $100$.";
+    const html = await renderHtml(source);
+
+    expect(html).toContain('data-type="math-inline"');
+    expect(await roundtrip(source)).toBe(`${source}\n`);
+  });
+
   it("edits inline math directly in the WYSIWYG view", async () => {
     expect(
       await editFormula("energy: $E=mc^2$", '[data-type="math-inline"]', "F=ma", {
