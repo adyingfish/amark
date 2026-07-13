@@ -20,6 +20,7 @@ import { fileRefSchema } from "./milkdown-file-ref-node";
 import { commentBlockSchema } from "./milkdown-comment-block-node";
 import { htmlImageSchema, imageSrcSchema } from "./milkdown-image-src";
 import { mathBlockSchema, mathInlineSchema } from "./milkdown-math-node";
+import { mathBlockView, mathInlineView } from "./milkdown-math-view";
 import { remarkPreserveMathSource } from "./remark-math-source";
 import { commonmark } from "@milkdown/kit/preset/commonmark";
 import { gfm } from "@milkdown/kit/preset/gfm";
@@ -132,6 +133,8 @@ export class MilkdownAdapter implements EditorAdapter {
       .use(commentBlockSchema)
       .use(mathInlineSchema)
       .use(mathBlockSchema)
+      .use(mathInlineView)
+      .use(mathBlockView)
       .use(history)
       .use(listener)
       .use(clipboard)
@@ -189,6 +192,16 @@ export class MilkdownAdapter implements EditorAdapter {
 
   setEditable(editable: boolean): void {
     if (this.editable === editable) return;
+
+    // Leaving WYSIWYG while a formula editor has focus commits it through the
+    // NodeView's focusout handler before the ProseMirror surface becomes read-only.
+    if (!editable) {
+      const activeElement = this.container?.ownerDocument.activeElement;
+      if (activeElement instanceof HTMLElement && activeElement.dataset.mathInput === "true") {
+        activeElement.blur();
+      }
+    }
+
     this.editable = editable;
     if (!this.editor) return;
 
@@ -197,6 +210,12 @@ export class MilkdownAdapter implements EditorAdapter {
       // ProseMirror reads `editable` as a predicate over state; returning the
       // tracked flag flips the contenteditable surface without re-mounting.
       view.setProps({ editable: () => editable });
+    });
+
+    this.container?.querySelectorAll<HTMLElement>(".math-preview").forEach((preview) => {
+      preview.tabIndex = editable ? 0 : -1;
+      preview.setAttribute("aria-disabled", String(!editable));
+      preview.title = editable ? "编辑 LaTeX / Edit LaTeX" : "";
     });
   }
 

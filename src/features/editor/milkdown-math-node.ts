@@ -2,9 +2,8 @@
 //
 // Two atom nodes, same shape as fileRefSchema/commentBlockSchema: the raw
 // LaTeX source lives in the node (text content for inline, `value` attr for
-// block) and toDOM renders it through KaTeX. Being atoms, they aren't
-// click-to-edit in WYSIWYG — switch to source view to change the formula,
-// same tradeoff already made for comment blocks and file refs.
+// block) and toDOM renders it through KaTeX. milkdown-math-view.ts adds the
+// WYSIWYG editing surface without changing this serialization contract.
 import { $nodeSchema } from "@milkdown/kit/utils";
 import { expectDomTypeError } from "@milkdown/kit/exception";
 import { Fragment } from "@milkdown/kit/prose/model";

@@ -14,6 +14,7 @@ import {
   Editor,
   rootCtx,
   defaultValueCtx,
+  editorViewCtx,
   remarkPluginsCtx,
   remarkStringifyOptionsCtx,
 } from "@milkdown/kit/core";
@@ -28,6 +29,7 @@ import { remarkCommentBlock } from "./remark-comment-block";
 import { fileRefSchema } from "./milkdown-file-ref-node";
 import { commentBlockSchema } from "./milkdown-comment-block-node";
 import { mathBlockSchema, mathInlineSchema } from "./milkdown-math-node";
+import { mathBlockView, mathInlineView } from "./milkdown-math-view";
 import { remarkPreserveMathSource } from "./remark-math-source";
 
 async function createEditor(
@@ -54,6 +56,8 @@ async function createEditor(
     .use(commentBlockSchema)
     .use(mathInlineSchema)
     .use(mathBlockSchema)
+    .use(mathInlineView)
+    .use(mathBlockView)
     .create();
   return { container, editor };
 }
@@ -72,6 +76,33 @@ async function renderHtml(markdown: string): Promise<string> {
   editor.destroy();
   container.remove();
   return html;
+}
+
+async function editFormula(
+  markdown: string,
+  selector: string,
+  value: string,
+  saveKey: KeyboardEventInit,
+): Promise<string> {
+  const { container, editor } = await createEditor(markdown);
+  const preview = container.querySelector<HTMLElement>(`${selector} .math-preview`);
+  expect(preview).not.toBeNull();
+  preview?.dispatchEvent(new MouseEvent("click", { bubbles: true, button: 0 }));
+
+  const input = container.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+    `${selector} [data-math-input="true"]`,
+  );
+  expect(input?.closest<HTMLElement>(".math-editor-panel")?.hidden).toBe(false);
+  if (input) {
+    input.value = value;
+    input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, ...saveKey }));
+  }
+
+  const output = editor.action(getMarkdown());
+  editor.destroy();
+  container.remove();
+  return output;
 }
 
 describe("milkdown real round-trip", () => {
@@ -214,6 +245,14 @@ describe("milkdown real round-trip", () => {
     expect(html).not.toContain("$E=mc^2$");
   });
 
+  it("edits inline math directly in the WYSIWYG view", async () => {
+    expect(
+      await editFormula("energy: $E=mc^2$", '[data-type="math-inline"]', "F=ma", {
+        key: "Enter",
+      }),
+    ).toBe("energy: $F=ma$\n");
+  });
+
   it("round-trips a math block unchanged", async () => {
     const src = "$$\na^2 + b^2 = c^2\n$$";
     expect(await roundtrip(src)).toBe(`${src}\n`);
@@ -239,5 +278,29 @@ describe("milkdown real round-trip", () => {
 
     expect(html).toContain('data-type="math-block"');
     expect(html).toContain("katex");
+  });
+
+  it("edits block math directly while preserving metadata", async () => {
+    const source = "$$asciimath\na^2 + b^2 = c^2\n$$";
+    expect(
+      await editFormula(source, '[data-type="math-block"]', "x = y + z", {
+        key: "Enter",
+        ctrlKey: true,
+      }),
+    ).toBe("$$asciimath\nx = y + z\n$$\n");
+  });
+
+  it("does not open the formula editor in a read-only rich view", async () => {
+    const { container, editor } = await createEditor("energy: $E=mc^2$");
+    editor.action((ctx) => ctx.get(editorViewCtx).setProps({ editable: () => false }));
+
+    const preview = container.querySelector<HTMLElement>('[data-type="math-inline"] .math-preview');
+    preview?.dispatchEvent(new MouseEvent("click", { bubbles: true, button: 0 }));
+
+    expect(
+      container.querySelector<HTMLElement>('[data-type="math-inline"] .math-editor-panel')?.hidden,
+    ).toBe(true);
+    editor.destroy();
+    container.remove();
   });
 });
