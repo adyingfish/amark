@@ -436,6 +436,17 @@ body {
   hanging-punctuation: none;
 }
 
+/* 行内间隙已由 KP 显式计算，父段落不得再做一次浏览器 justify。列表的第一
+   行保持 inline，使原生 ::marker 从首次布局起就能锚定到文字基线；后续行
+   仍是 block 行盒，因此多行列表项的断行与正文一致。 */
+.amark-typeset-mirror .amark-tl-paragraph {
+  text-align: left;
+}
+
+.amark-typeset-mirror li > p.amark-tl-paragraph > .amark-tl-line:first-child {
+  display: inline;
+}
+
 /* ======= THEMES ======= */
 
 body,

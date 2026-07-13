@@ -8,6 +8,7 @@
 import {
   FORCED_BREAK,
   INFINITE_PENALTY,
+  PAR_FILL_STRETCH,
   finishItems,
   type KpBox,
   type KpGlue,
@@ -192,7 +193,14 @@ export function buildItems(
   for (const atom of atoms) {
     if (atom.kind === "br") {
       // 段内硬换行：行前补无限拉伸 glue（该行按末行处理），再强制断。
-      items.push({ type: "glue", width: 0, stretch: 1e7, shrink: 0, text: "", seg: 0 });
+      items.push({
+        type: "glue",
+        width: 0,
+        stretch: PAR_FILL_STRETCH,
+        shrink: 0,
+        text: "",
+        seg: 0,
+      });
       items.push({
         type: "penalty",
         width: 0,

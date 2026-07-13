@@ -9,6 +9,8 @@
 
 export const INFINITE_PENALTY = 1000;
 export const FORCED_BREAK = -1000;
+/** 段末/硬换行前用于吸收剩余行宽、从而保持末行左对齐的弹性胶。 */
+export const PAR_FILL_STRETCH = 1e7;
 
 export interface KpBox {
   type: "box";
@@ -34,10 +36,16 @@ export interface KpPenalty {
 export type KpItem = KpBox | KpGlue | KpPenalty;
 
 export interface KpOptions {
-  /** 允许的最大拉伸比（badness 上限的等价表达），默认 4。 */
+  /** 首轮允许的最大拉伸比，默认 4。 */
   tolerance?: number;
+  /** 失败重试时允许放宽到的硬上限，默认 8；超过后回退原生断行。 */
+  maxTolerance?: number;
   linePenalty?: number;
   doubleHyphenDemerits?: number;
+  /** 相邻行跨越两个及以上松紧等级时追加的 demerits，默认 3000。 */
+  adjacentFitnessDemerits?: number;
+  /** 多行段落末行至少占版心的比例，默认 0.25；不足则换断点或回退。 */
+  minLastLineRatio?: number;
 }
 
 export interface KpLine {
@@ -51,7 +59,7 @@ export interface KpLine {
 export function finishItems(items: KpItem[]): KpItem[] {
   items.push(
     { type: "penalty", width: 0, cost: INFINITE_PENALTY, flagged: false },
-    { type: "glue", width: 0, stretch: 1e7, shrink: 0 },
+    { type: "glue", width: 0, stretch: PAR_FILL_STRETCH, shrink: 0 },
     { type: "penalty", width: 0, cost: FORCED_BREAK, flagged: false },
   );
   return items;
@@ -61,25 +69,41 @@ interface KpNode {
   breakIndex: number;
   demerits: number;
   ratio: number;
+  fitness: FitnessClass;
   flagged: boolean;
+  forced: boolean;
   prev: KpNode | null;
 }
 
+/** TeX 的四档行松紧等级；相邻行跨档过大时会产生明显的密度跳变。 */
+type FitnessClass = 0 | 1 | 2 | 3;
+
+function fitnessClass(ratio: number): FitnessClass {
+  if (ratio < -0.5) return 0; // tight
+  if (ratio <= 0.5) return 1; // decent
+  if (ratio <= 1) return 2; // loose
+  return 3; // very loose
+}
+
 /**
- * 对 items 求最优断行。失败时按 tolerance ×2 重试至 8 倍，仍不可行则返回
- * null（调用方回退到浏览器原生换行）。items 须已 finishItems()。
+ * 对 items 求最优断行。失败时按 tolerance ×2 重试，但不会超过
+ * maxTolerance；仍不可行则返回 null（调用方回退浏览器原生换行）。
+ * items 须已 finishItems()。
  */
 export function breakLines(
   items: KpItem[],
   lineWidth: number,
   opts: KpOptions = {},
 ): KpLine[] | null {
-  const baseTolerance = opts.tolerance ?? 4;
-  for (let scale = 1; scale <= 8; scale *= 2) {
-    const lines = tryBreak(items, lineWidth, baseTolerance * scale, opts);
+  const baseTolerance = Math.max(0.1, opts.tolerance ?? 4);
+  const maxTolerance = Math.max(baseTolerance, opts.maxTolerance ?? 8);
+  let tolerance = baseTolerance;
+  while (true) {
+    const lines = tryBreak(items, lineWidth, tolerance, opts);
     if (lines) return lines;
+    if (tolerance >= maxTolerance) return null;
+    tolerance = Math.min(tolerance * 2, maxTolerance);
   }
-  return null;
 }
 
 function tryBreak(
@@ -90,6 +114,8 @@ function tryBreak(
 ): KpLine[] | null {
   const linePenalty = opts.linePenalty ?? 10;
   const doubleHyphenDemerits = opts.doubleHyphenDemerits ?? 3000;
+  const adjacentFitnessDemerits = opts.adjacentFitnessDemerits ?? 3000;
+  const minLastLineRatio = Math.max(0, Math.min(1, opts.minLastLineRatio ?? 0.25));
   const n = items.length;
 
   // 前缀和（不含 penalty 的宽度——penalty 宽度只在断于其上时计入）。
@@ -124,7 +150,15 @@ function tryBreak(
     return i;
   };
 
-  const start: KpNode = { breakIndex: -1, demerits: 0, ratio: 0, flagged: false, prev: null };
+  const start: KpNode = {
+    breakIndex: -1,
+    demerits: 0,
+    ratio: 0,
+    fitness: 1,
+    flagged: false,
+    forced: true,
+    prev: null,
+  };
   const nodes: KpNode[] = [start];
   let last: KpNode | null = null;
 
@@ -136,13 +170,27 @@ function tryBreak(
     const isForced = penaltyCost <= FORCED_BREAK;
     const isFlagged = item.type === "penalty" && item.flagged;
 
-    let best: KpNode | null = null;
+    // 不能只保留每个断点的单一最低分节点：未来一行的 fitness demerits
+    // 取决于上一行的松紧等级，因此每一档都必须保留自己的最优前驱。
+    const bestByFitness: Array<KpNode | null> = [null, null, null, null];
     for (const a of nodes) {
       const from = lineStartAfter(a.breakIndex);
       if (from >= b && !isForced) continue;
       const natural = sumW[b]! - sumW[from]! + penaltyWidth;
       const stretch = sumS[b]! - sumS[from]!;
       const shrink = sumZ[b]! - sumZ[from]!;
+
+      // finishItems 的无限弹性会让任何长度的末行 badness≈0。若这是普通
+      // 多行段落，则先挡住过短末行；显式硬换行后的短行视为作者意图。
+      const isParagraphEnd = isForced && b === n - 1;
+      if (
+        isParagraphEnd &&
+        a.breakIndex >= 0 &&
+        !a.forced &&
+        natural < lineWidth * minLastLineRatio
+      ) {
+        continue;
+      }
 
       let ratio: number;
       if (natural < lineWidth) {
@@ -160,24 +208,39 @@ function tryBreak(
       let demerits = (linePenalty + Math.min(badness, 10_000)) ** 2;
       if (penaltyCost > 0) demerits += penaltyCost * penaltyCost;
       else if (!isForced && penaltyCost < 0) demerits -= penaltyCost * penaltyCost;
-      if (isFlagged && a.flagged) demerits += doubleHyphenDemerits;
+      if (!a.forced && isFlagged && a.flagged) demerits += doubleHyphenDemerits;
+
+      const fitness = fitnessClass(ratio);
+      if (!a.forced && Math.abs(fitness - a.fitness) > 1) {
+        demerits += adjacentFitnessDemerits;
+      }
 
       const total = a.demerits + demerits;
-      if (!best || total < best.demerits) {
-        best = { breakIndex: b, demerits: total, ratio, flagged: isFlagged, prev: a };
+      const current = bestByFitness[fitness];
+      if (!current || total < current.demerits) {
+        bestByFitness[fitness] = {
+          breakIndex: b,
+          demerits: total,
+          ratio,
+          fitness,
+          flagged: isFlagged,
+          forced: isForced,
+          prev: a,
+        };
       }
     }
 
-    if (!best) {
+    const best = bestByFitness.filter((node): node is KpNode => node !== null);
+    if (best.length === 0) {
       if (isForced) return null; // 收尾断点都不可达 → 本轮 tolerance 失败
       continue;
     }
     if (isForced) {
       // forced break 必须被采用：淘汰其之前的所有活动节点，后续行只能从这里续。
       nodes.length = 0;
-      last = best;
+      last = best.reduce((winner, node) => (node.demerits < winner.demerits ? node : winner));
     }
-    nodes.push(best);
+    nodes.push(...best);
   }
 
   if (!last) return null;

@@ -6,11 +6,11 @@
 // 真身任何变化（split 模式打字、换文档、换主题、容器变宽）都触发防抖后
 // 整体重建镜像，因此无需任何“还原原文”的簿记。
 //
-// 排版仅作用于计算样式为 text-align: justify 的段落（academic 主题正文）；
-// 含允许列表之外元素的段落原样保留浏览器换行。
+// 排版作用于「仅预览」镜像里的所有合格正文段落，与当前主题是否预先设置
+// text-align: justify 无关；含允许列表之外元素的段落原样保留浏览器换行。
 
 import { hyphenateSync } from "hyphen/en";
-import { FORCED_BREAK, breakLines } from "./kp-core";
+import { FORCED_BREAK, PAR_FILL_STRETCH, breakLines } from "./kp-core";
 import {
   buildItems,
   type InlineToken,
@@ -150,7 +150,6 @@ export class TypesetController {
 
   private typesetParagraph(p: HTMLElement): void {
     const cs = getComputedStyle(p);
-    if (cs.textAlign !== "justify") return;
     if (cs.textIndent !== "0px") return;
 
     const collected = collectTokens(p);
@@ -178,7 +177,14 @@ export class TypesetController {
     const lines = breakLines(items, lineWidth);
     if (!lines) return; // 不可行（如超长不可断内容）→ 保留浏览器换行
 
-    correctResiduals(renderLines(p, items, lines, segElements, lineWidth));
+    // 校正若超出安全范围，说明测量模型与最终 DOM 差异已不是亚像素误差；
+    // 此时宁可恢复镜像中的原始段落，让浏览器原生断行，也不强撑出怪异字距。
+    const fallbackChildren = Array.from(p.childNodes, (node) => node.cloneNode(true));
+    const rendered = renderLines(p, items, lines, segElements, lineWidth);
+    if (!correctResiduals(rendered)) {
+      p.classList.remove("amark-tl-paragraph");
+      p.replaceChildren(...fallbackChildren);
+    }
   }
 
   private ensureMeasureHost(): HTMLElement {
@@ -329,10 +335,19 @@ interface RenderedLine {
   el: HTMLElement;
   /** 该行内容应有的总宽度（悬挂行比版心宽出悬挂量）。 */
   target: number;
-  /** 行内可参与残差均摊的间隙 span（空格 / margin 间隙）。 */
-  gaps: HTMLElement[];
+  /** 行内可参与残差校正的间隙；保留各自伸缩权重，避免无差别均摊。 */
+  gaps: RenderedGap[];
   /** 末行与硬换行前的行按自然宽度排，不做残差校正。 */
   corrigible: boolean;
+}
+
+interface RenderedGap {
+  el: HTMLElement;
+  kind: "space" | "margin";
+  width: number;
+  natural: number;
+  stretch: number;
+  shrink: number;
 }
 
 function renderLines(
@@ -351,6 +366,7 @@ function renderLines(
     return chain;
   });
 
+  p.classList.add("amark-tl-paragraph");
   p.replaceChildren();
   const rendered: RenderedLine[] = [];
   let prevBreak = -1;
@@ -358,7 +374,7 @@ function renderLines(
   for (const line of lines) {
     const lineEl = document.createElement("span");
     lineEl.className = "amark-tl-line";
-    const gaps: HTMLElement[] = [];
+    const gaps: RenderedGap[] = [];
 
     // 连续同 seg 的内容合并进同一个包裹链实例，避免逐字包 span。
     let currentSeg = -1;
@@ -384,6 +400,9 @@ function renderLines(
       if (item.type === "box") {
         innerFor(item.seg).append(item.text);
       } else if (item.type === "glue") {
+        // 段末/硬换行前的 par-fill glue 只参与算法预算，不是可见间隙；
+        // 渲染它会在末行 DOM 中制造一个数百像素的空 margin。
+        if (item.width === 0 && item.stretch >= PAR_FILL_STRETCH) continue;
         const width =
           item.width + (line.ratio >= 0 ? line.ratio * item.stretch : line.ratio * item.shrink);
         if (item.text === " ") {
@@ -393,14 +412,28 @@ function renderLines(
           space.style.wordSpacing = `${width - natural}px`;
           space.textContent = " ";
           innerFor(item.seg).appendChild(space);
-          gaps.push(space);
+          gaps.push({
+            el: space,
+            kind: "space",
+            width,
+            natural,
+            stretch: item.stretch,
+            shrink: item.shrink,
+          });
         } else {
           // CJK/中西间隙：空 span 的 margin-left 承载正负间距（挤压为负）。
           // 宽度为 0 也要占位，供残差校正均摊。
           const gap = document.createElement("span");
           gap.style.marginLeft = `${width}px`;
           innerFor(item.seg).appendChild(gap);
-          gaps.push(gap);
+          gaps.push({
+            el: gap,
+            kind: "margin",
+            width,
+            natural: 0,
+            stretch: item.stretch,
+            shrink: item.shrink,
+          });
         }
       }
       // 行中 penalty 不产出内容（未断于其上时宽度为 0）。
@@ -428,10 +461,11 @@ function renderLines(
 /**
  * 逐行残差校正：KP 的预算基于逐段测量之和，而最终渲染还叠加合字、字距、
  * 亚像素舍入等引擎内部效应，行宽会差出可见的一两个像素。渲染后用同一
- * 布局引擎实测每行内容宽度，把与目标的差值均摊进该行的间隙，精确闭合。
- * 先批量读、后批量写，整段只多一次布局。
+ * 布局引擎实测每行内容宽度，把与目标的微小差值按 glue 的伸缩能力加权
+ * 分配。若差值已经大到不像舍入误差，则返回 false，让整段回退浏览器断行。
+ * 先批量读、校验，再批量写，避免半段已改、半段回退。
  */
-function correctResiduals(rendered: RenderedLine[]): void {
+function correctResiduals(rendered: RenderedLine[]): boolean {
   const range = document.createRange();
   const residuals = rendered.map((line) => {
     if (!line.corrigible || line.gaps.length === 0) return 0;
@@ -439,16 +473,33 @@ function correctResiduals(rendered: RenderedLine[]): void {
     return line.target - range.getBoundingClientRect().width;
   });
 
+  // 校正仅用于吸收 shaped-run 与逐项测量之间的亚像素误差。允许总计最多
+  // 4px，且间隙越多才允许稍大的总误差；超出即说明模型失配，不应硬拉。
+  for (let i = 0; i < rendered.length; i++) {
+    const line = rendered[i]!;
+    const residual = residuals[i]!;
+    if (!line.corrigible || Math.abs(residual) < 0.25) continue;
+    if (line.gaps.length === 0) return false;
+    const safeLimit = Math.min(4, Math.max(1, line.gaps.length * 0.35));
+    if (Math.abs(residual) > safeLimit) return false;
+  }
+
   rendered.forEach((line, i) => {
     const residual = residuals[i]!;
     if (Math.abs(residual) < 0.25) return;
-    const delta = residual / line.gaps.length;
-    for (const gap of line.gaps) {
-      if (gap.textContent === " ") {
-        gap.style.wordSpacing = `${parseFloat(gap.style.wordSpacing) + delta}px`;
+    const weights = line.gaps.map((gap) =>
+      Math.max(0.01, residual >= 0 ? gap.stretch : gap.shrink),
+    );
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+    line.gaps.forEach((gap, gapIndex) => {
+      const delta = residual * (weights[gapIndex]! / totalWeight);
+      const corrected = gap.width + delta;
+      if (gap.kind === "space") {
+        gap.el.style.wordSpacing = `${corrected - gap.natural}px`;
       } else {
-        gap.style.marginLeft = `${parseFloat(gap.style.marginLeft) + delta}px`;
+        gap.el.style.marginLeft = `${corrected}px`;
       }
-    }
+    });
   });
+  return true;
 }

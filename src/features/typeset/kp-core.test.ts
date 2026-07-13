@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { FORCED_BREAK, INFINITE_PENALTY, breakLines, finishItems, type KpItem } from "./kp-core";
+import {
+  FORCED_BREAK,
+  INFINITE_PENALTY,
+  PAR_FILL_STRETCH,
+  breakLines,
+  finishItems,
+  type KpItem,
+} from "./kp-core";
 
 const box = (width: number): KpItem => ({ type: "box", width });
 const glue = (width: number, stretch: number, shrink: number): KpItem => ({
@@ -81,13 +88,19 @@ describe("breakLines", () => {
   it("段内 forced break 必须被采用", () => {
     const items = finishItems([
       box(30),
-      glue(0, 1e7, 0),
+      glue(0, PAR_FILL_STRETCH, 0),
       { type: "penalty", width: 0, cost: FORCED_BREAK, flagged: false },
-      box(30),
+      box(10),
     ]);
     const lines = breakLines(items, 100);
     expect(lines).not.toBeNull();
+    // 显式硬换行后的短末行是作者意图，不应用自动末行最短比例拦截。
     expect(lines!.map((l) => l.breakIndex)).toEqual([2, items.length - 1]);
+  });
+
+  it("单行短段落不触发末行最短比例", () => {
+    const items = finishItems([box(10)]);
+    expect(breakLines(items, 100)?.map((line) => line.breakIndex)).toEqual([items.length - 1]);
   });
 
   it("cost 为 INFINITE 的 penalty 永远不是断点", () => {
@@ -101,5 +114,59 @@ describe("breakLines", () => {
     ]);
     const lines = breakLines(items, 100);
     expect(lines).toBeNull();
+  });
+
+  it("重排前文以避免只剩一个汉字的末行", () => {
+    // 每行恰好可放 30 字；贪心会得到 30/30/30/30/1。
+    // KP 应牺牲前几行的少量字距，把末行拉回可读长度。
+    const items: KpItem[] = [];
+    for (let i = 0; i < 121; i++) {
+      if (i > 0) items.push(glue(0, 0.5, 0));
+      items.push(box(10));
+    }
+    finishItems(items);
+
+    const lines = breakLines(items, 300);
+    expect(lines).not.toBeNull();
+
+    let previousBreak = -1;
+    const boxesPerLine = lines!.map((line) => {
+      let count = 0;
+      for (let i = previousBreak + 1; i < line.breakIndex; i++) {
+        if (items[i]!.type === "box") count++;
+      }
+      previousBreak = line.breakIndex;
+      return count;
+    });
+    expect(boxesPerLine).toEqual([28, 28, 28, 29, 8]);
+  });
+
+  it("不会为凑出解而把 tolerance 放宽到视觉失真", () => {
+    // 第一行唯一断点需要 r=10；默认硬上限 8 应回退，显式放宽才接受。
+    const items = finishItems([box(20), glue(0, 6, 0), box(20), glue(0, 1, 0), box(100)]);
+    expect(breakLines(items, 100)).toBeNull();
+    expect(breakLines(items, 100, { maxTolerance: 16 })?.[0]?.ratio).toBe(10);
+  });
+
+  it("保留不同 fitness 状态，使相邻行松紧惩罚能改变路径", () => {
+    const widths = [47, 32, 22, 44, 30, 44, 41, 31];
+    const items: KpItem[] = [];
+    for (const width of widths) {
+      if (items.length > 0) items.push(glue(8, 6, 3));
+      items.push(box(width));
+    }
+    finishItems(items);
+
+    const withoutFitness = breakLines(items, 122, {
+      adjacentFitnessDemerits: 0,
+      minLastLineRatio: 0,
+    });
+    const withFitness = breakLines(items, 122, {
+      adjacentFitnessDemerits: 1_000_000,
+      minLastLineRatio: 0,
+    });
+
+    expect(withoutFitness?.map((line) => line.breakIndex)).toEqual([5, 9, 13, 17]);
+    expect(withFitness?.map((line) => line.breakIndex)).toEqual([3, 9, 13, 17]);
   });
 });
