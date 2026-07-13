@@ -28,6 +28,7 @@ import { remarkCommentBlock } from "./remark-comment-block";
 import { fileRefSchema } from "./milkdown-file-ref-node";
 import { commentBlockSchema } from "./milkdown-comment-block-node";
 import { mathBlockSchema, mathInlineSchema } from "./milkdown-math-node";
+import { remarkPreserveMathSource } from "./remark-math-source";
 
 async function createEditor(
   markdown: string,
@@ -41,6 +42,7 @@ async function createEditor(
       ctx.set(remarkPluginsCtx, [
         { plugin: remarkBreaks, options: {} },
         { plugin: remarkMath, options: {} },
+        { plugin: remarkPreserveMathSource, options: {} },
         { plugin: remarkCommentBlock, options: {} },
         { plugin: remarkFileRef, options: {} },
       ]);
@@ -200,6 +202,10 @@ describe("milkdown real round-trip", () => {
     expect(await roundtrip("energy: $E=mc^2$")).toBe("energy: $E=mc^2$\n");
   });
 
+  it("preserves a double-dollar inline math fence", async () => {
+    expect(await roundtrip("Lift($$L$$)")).toBe("Lift($$L$$)\n");
+  });
+
   it("renders inline math as KaTeX output in the DOM", async () => {
     const html = await renderHtml("energy: $E=mc^2$");
 
@@ -211,6 +217,21 @@ describe("milkdown real round-trip", () => {
   it("round-trips a math block unchanged", async () => {
     const src = "$$\na^2 + b^2 = c^2\n$$";
     expect(await roundtrip(src)).toBe(`${src}\n`);
+  });
+
+  it("preserves a longer math block fence", async () => {
+    const src = "$$$$\na^2 + b^2 = c^2\n$$$$";
+    expect(await roundtrip(src)).toBe(src + "\n");
+  });
+
+  it("preserves math block metadata", async () => {
+    const src = "$$asciimath\na^2 + b^2 = c^2\n$$";
+    expect(await roundtrip(src)).toBe(src + "\n");
+  });
+
+  it("preserves math fences inside a block quote without duplicating quote markers", async () => {
+    const src = "> $$$$\n> a^2 + b^2 = c^2\n> $$$$";
+    expect(await roundtrip(src)).toBe(src + "\n");
   });
 
   it("renders a math block as KaTeX output in the DOM", async () => {

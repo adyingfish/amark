@@ -15,6 +15,7 @@
         "katex": "^0.17.0",
         "lucide-react": "^1.21.0",
         "mdast-util-find-and-replace": "^3.0.2",
+        "mdast-util-math": "^3.0.0",
         "mdast-util-to-markdown": "^2.1.2",
         "react": "^19.2.7",
         "react-dom": "^19.2.7",

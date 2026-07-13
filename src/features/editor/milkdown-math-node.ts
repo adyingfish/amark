@@ -10,6 +10,11 @@ import { expectDomTypeError } from "@milkdown/kit/exception";
 import { Fragment } from "@milkdown/kit/prose/model";
 import "katex/dist/katex.min.css";
 import katex from "katex";
+import {
+  mathSourceData,
+  readPreservedMathSource,
+  type PreservedMathSource,
+} from "./remark-math-source";
 
 const KATEX_OPTIONS = { throwOnError: false } as const;
 
@@ -21,6 +26,10 @@ export const mathInlineSchema = $nodeSchema("mathInline", () => ({
   content: "text*",
   inline: true,
   atom: true,
+  attrs: {
+    raw: { default: "", validate: "string" },
+    sourceValue: { default: "", validate: "string" },
+  },
   parseDOM: [
     {
       tag: `span[data-type="${MATH_INLINE_DATA_TYPE}"]`,
@@ -41,8 +50,12 @@ export const mathInlineSchema = $nodeSchema("mathInline", () => ({
   parseMarkdown: {
     match: ({ type }) => type === "inlineMath",
     runner: (state, node, type) => {
+      const source = readPreservedMathSource(node);
       state
-        .openNode(type)
+        .openNode(type, {
+          raw: source?.raw ?? "",
+          sourceValue: source?.value ?? (node.value as string),
+        })
         .addText(node.value as string)
         .closeNode();
     },
@@ -50,7 +63,14 @@ export const mathInlineSchema = $nodeSchema("mathInline", () => ({
   toMarkdown: {
     match: (node) => node.type.name === "mathInline",
     runner: (state, node) => {
-      state.addNode("inlineMath", undefined, node.textContent);
+      const source: PreservedMathSource = {
+        raw: node.attrs.raw as string,
+        value: node.attrs.sourceValue as string,
+        meta: null,
+      };
+      state.addNode("inlineMath", undefined, node.textContent, {
+        data: mathSourceData(source),
+      });
     },
   },
 }));
@@ -64,12 +84,18 @@ export const mathBlockSchema = $nodeSchema("mathBlock", () => ({
   isolating: true,
   attrs: {
     value: { default: "", validate: "string" },
+    meta: { default: null },
+    raw: { default: "", validate: "string" },
+    sourceValue: { default: "", validate: "string" },
   },
   parseDOM: [
     {
       tag: `div[data-type="${MATH_BLOCK_DATA_TYPE}"]`,
       preserveWhitespace: "full",
-      getAttrs: (dom: HTMLElement) => ({ value: dom.dataset.value ?? "" }),
+      getAttrs: (dom: HTMLElement) => ({
+        value: dom.dataset.value ?? "",
+        meta: dom.dataset.meta || null,
+      }),
     },
   ],
   toDOM: (node) => {
@@ -77,19 +103,34 @@ export const mathBlockSchema = $nodeSchema("mathBlock", () => ({
     const dom = document.createElement("div");
     dom.dataset.type = MATH_BLOCK_DATA_TYPE;
     dom.dataset.value = code;
+    if (node.attrs.meta) dom.dataset.meta = node.attrs.meta as string;
     katex.render(code, dom, { ...KATEX_OPTIONS, displayMode: true });
     return dom;
   },
   parseMarkdown: {
     match: ({ type }) => type === "math",
     runner: (state, node, type) => {
-      state.addNode(type, { value: node.value as string });
+      const source = readPreservedMathSource(node);
+      state.addNode(type, {
+        value: node.value as string,
+        meta: typeof node.meta === "string" ? node.meta : null,
+        raw: source?.raw ?? "",
+        sourceValue: source?.value ?? (node.value as string),
+      });
     },
   },
   toMarkdown: {
     match: (node) => node.type.name === "mathBlock",
     runner: (state, node) => {
-      state.addNode("math", undefined, node.attrs.value as string);
+      const source: PreservedMathSource = {
+        raw: node.attrs.raw as string,
+        value: node.attrs.sourceValue as string,
+        meta: (node.attrs.meta as string | null) ?? null,
+      };
+      state.addNode("math", undefined, node.attrs.value as string, {
+        meta: source.meta,
+        data: mathSourceData(source),
+      });
     },
   },
 }));
