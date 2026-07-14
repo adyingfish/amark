@@ -454,6 +454,15 @@ body {
   text-align: left;
 }
 
+/* KP 会在不可拆内容过宽、行内结构不受支持，或最终实测与预算偏差过大时
+   保守地退回浏览器原生断行。仅预览仍应保持所有主题的左右对齐；否则只有
+   自带 justify 的 academic 主题看起来正常，literary/newsprint 等主题会在
+   同一篇文档里混入右边缘参差的段落。保留 text-align-last 的 auto 默认值：
+   普通段落末行自然靠左，展示公式也能继续遵循自身的居中规则。 */
+.amark-typeset-mirror p:not(.amark-tl-paragraph) {
+  text-align: justify;
+}
+
 .amark-typeset-mirror li > p.amark-tl-paragraph > .amark-tl-line:first-child {
   display: inline;
 }
