@@ -148,6 +148,18 @@ describe("breakLines", () => {
     expect(breakLines(items, 100, { maxTolerance: 16 })?.[0]?.ratio).toBe(10);
   });
 
+  it("把不可断 box 的内部伸缩计入行宽预算", () => {
+    const items = finishItems([
+      { type: "box", width: 70, stretch: 10, shrink: 5 },
+      glue(0, 0, 0),
+      box(20),
+      glue(0, 0, 0),
+      box(100),
+    ]);
+    const lines = breakLines(items, 100);
+    expect(lines?.[0]?.ratio).toBe(1);
+  });
+
   it("保留不同 fitness 状态，使相邻行松紧惩罚能改变路径", () => {
     const widths = [47, 32, 22, 44, 30, 44, 41, 31];
     const items: KpItem[] = [];

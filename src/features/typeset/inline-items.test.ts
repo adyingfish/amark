@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { FORCED_BREAK, INFINITE_PENALTY, breakLines } from "./kp-core";
-import { HANG_COST, buildItems, type TypesetItem, type TypesetMeasure } from "./inline-items";
+import {
+  HANG_COST,
+  buildItems,
+  type TypesetGlue,
+  type TypesetItem,
+  type TypesetMeasure,
+} from "./inline-items";
 
 // 假测量：每个码点 10px，em 也是 10px，便于手算宽度。
 const measure: TypesetMeasure = {
@@ -15,11 +21,11 @@ const indexOfBox = (items: TypesetItem[], text: string): number =>
   items.findIndex((it) => it.type === "box" && it.text === text);
 
 describe("buildItems", () => {
-  it("纯中文：逐字成 box，字间是 0 宽微伸 glue", () => {
+  it("纯中文：逐字成 box，字间是 0 宽等权伸缩 glue", () => {
     const items = buildItems([{ text: "你好世界", seg: 0 }], measure);
     expect(boxes(items)).toEqual(["你", "好", "世", "界"]);
     const gap = items[1]!;
-    expect(gap).toMatchObject({ type: "glue", width: 0, stretch: 0.5, shrink: 0 });
+    expect(gap).toMatchObject({ type: "glue", width: 0, stretch: 1.25, shrink: 0 });
   });
 
   it("避头 + 挤压 + 全角悬挂：「你好。世界」", () => {
@@ -62,9 +68,9 @@ describe("buildItems", () => {
     expect(flagged).toHaveLength(2);
     // 连字符 penalty 携带 "-" 的实测宽度，断于其上时渲染补 "-"。
     expect(flagged[0]).toMatchObject({ width: 10, text: "-" });
-    // 空格 glue：宽 w、伸 w/2、缩 w/3。
+    // 空格 glue：自然宽 w，伸长量与 CJK/中西间隙同为 em/8，缩 w/3。
     const space = items.find((it) => it.type === "glue" && it.text === " ");
-    expect(space).toMatchObject({ width: 10, stretch: 5 });
+    expect(space).toMatchObject({ width: 10, stretch: 1.25 });
   });
 
   it("短单词不做词内断词", () => {
@@ -75,6 +81,34 @@ describe("buildItems", () => {
       minHyphenateLength: 6,
     });
     expect(boxes(items)).toEqual(["hello", "world"]);
+    expect(items.find((it) => it.type === "box" && it.text === "hello")).toMatchObject({
+      trackingUnits: 5,
+      stretch: 1,
+      shrink: 0.5,
+    });
+  });
+
+  it("行内公式作为不可拆原子 box，并在中文边界保留中西间隙", () => {
+    const items = buildItems(
+      [
+        { text: "公式", seg: 0 },
+        { atom: 7, width: 48, seg: 0 },
+        { text: "可以参与断行", seg: 0 },
+      ],
+      measure,
+    );
+    const atom = items.findIndex((it) => it.type === "box" && it.atom === 7);
+    expect(items[atom]).toMatchObject({ type: "box", width: 48, text: "", atom: 7 });
+    expect(items[atom - 1]).toMatchObject({ type: "glue", width: 1.25, stretch: 1.25 });
+    expect(items[atom + 1]).toMatchObject({ type: "glue", width: 1.25, stretch: 1.25 });
+  });
+
+  it("混排时英文空格不再比中文字间承担更多伸长量", () => {
+    const items = buildItems([{ text: "中文 mixed words 段落", seg: 0 }], measure);
+    const visibleGaps = items.filter(
+      (it): it is TypesetGlue => it.type === "glue" && it.stretch < 1e7,
+    );
+    expect(new Set(visibleGaps.map((it) => it.stretch))).toEqual(new Set([1.25]));
   });
 
   it("段内硬换行编译为无限拉伸 glue + forced penalty", () => {

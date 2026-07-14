@@ -16,8 +16,14 @@ import {
   type KpPenalty,
 } from "./kp-core";
 
-/** 段内文本片段（seg 标识样式来源，由调用方维护）或硬换行。 */
-export type InlineToken = { text: string; seg: number } | { br: true };
+/**
+ * 段内文本片段、不可拆的行内对象（例如 KaTeX 公式）或硬换行。
+ * seg 标识样式来源；atom 是调用方维护的对象下标，width 是对象实测宽度。
+ */
+export type InlineToken =
+  | { text: string; seg: number }
+  | { atom: number; width: number; seg: number }
+  | { br: true };
 
 export interface TypesetMeasure {
   /** 测量 text 在 seg 样式下的像素宽度。 */
@@ -36,6 +42,10 @@ export interface BuildItemsOptions {
 export interface TypesetBox extends KpBox {
   text: string;
   seg: number;
+  /** 非文本原子对象的调用方下标；文本 box 不设置。 */
+  atom?: number;
+  /** CSS letter-spacing 的分配单位；只给包含西文字符的文本盒设置。 */
+  trackingUnits?: number;
 }
 export interface TypesetGlue extends KpGlue {
   /** 渲染用文本：西文空格为 " "，CJK 间隙为 ""。 */
@@ -73,11 +83,21 @@ const ASCII_AFTER_CJK = new Set(",.;:!?)]}");
 // 单弯引号 ’ 不收，否则英文 don’t 会被拆散）。
 const CJK_RE = /[⺀-鿿豈-﫿！-｠“”]/;
 const WORD_RE = /^[A-Za-z]+$/;
+/**
+ * 一行的剩余宽度应在中文字符间、英文词间和中西边界上大致均匀分摊。
+ * 统一使用 1/8 em 的伸长能力，避免混排时英文空格承担约三倍于中文字间的
+ * 伸长量，形成截图中那种醒目的空洞。
+ */
+const INLINE_GAP_STRETCH_EM = 0.125;
+/** 西文单词内部不允许断行，但可用轻微 tracking 分担公式附近的剩余行宽。 */
+const LATIN_TRACKING_STRETCH_EM = 0.02;
+const LATIN_TRACKING_SHRINK_EM = 0.01;
 
 type Atom =
   | { kind: "cjk"; text: string; seg: number }
   | { kind: "word"; text: string; seg: number }
   | { kind: "apunct"; text: string; seg: number }
+  | { kind: "atomic"; atom: number; width: number; seg: number }
   | { kind: "space"; seg: number }
   | { kind: "br" };
 
@@ -95,6 +115,10 @@ function tokenize(tokens: InlineToken[]): Atom[] {
   for (const token of tokens) {
     if ("br" in token) {
       atoms.push({ kind: "br" });
+      continue;
+    }
+    if ("atom" in token) {
+      atoms.push({ kind: "atomic", ...token });
       continue;
     }
     const { text, seg } = token;
@@ -178,11 +202,16 @@ export function buildItems(
           seg,
         });
       }
+      const text = syllables[i]!;
+      const trackingUnits = /[A-Za-z]/.test(text) ? [...text].length : 0;
       items.push({
         type: "box",
-        width: measure.text(syllables[i]!, seg),
-        text: syllables[i]!,
+        width: measure.text(text, seg),
+        stretch: trackingUnits * measure.em(seg) * LATIN_TRACKING_STRETCH_EM,
+        shrink: trackingUnits * measure.em(seg) * LATIN_TRACKING_SHRINK_EM,
+        text,
         seg,
+        trackingUnits: trackingUnits || undefined,
       });
     }
   };
@@ -218,12 +247,13 @@ export function buildItems(
       continue;
     }
 
-    const firstCh = atom.text[0]!;
+    const firstCh = "text" in atom ? atom.text[0]! : "";
     if (prev) {
-      const prevCh = prev.text[prev.text.length - 1]!;
+      const prevCh = "text" in prev ? prev.text[prev.text.length - 1]! : "";
       const prevCjk = prev.kind === "cjk";
       if (pendingSpace !== null) {
-        // 空格间隙：宽 w、伸 w/2、缩 w/3；避头字符前禁断；全角/半角句读后可悬挂。
+        // 空格间隙：自然宽度不变，伸长能力与其他行内间隙统一；缩窄仍按
+        // 空格自身宽度计算。避头字符前禁断；全角/半角句读后可悬挂。
         const seg = pendingSpace;
         const forbid = NO_START.has(firstCh);
         const hangable =
@@ -233,21 +263,23 @@ export function buildItems(
         if (hangable) hang(prevCh, prev.seg);
         if (forbid) noBreak(seg);
         const w = measure.text(" ", seg);
-        glue(w, w / 2, w / 3, " ", seg);
+        glue(w, measure.em(seg) * INLINE_GAP_STRETCH_EM, w / 3, " ", seg);
       } else if (atom.kind === "apunct") {
         // 半角句读紧贴前字：无 glue 即无断点（避头）。
       } else if (prevCjk && atom.kind === "cjk") {
-        // CJK 间隙：宽 0、微伸 0.05em；标点挤压提供 shrink；避头尾用 INF 禁断。
+        // CJK 间隙：宽 0、伸长能力与词间空格统一；标点挤压提供 shrink；
+        // 避头尾用 INF 禁断。
         const forbid = NO_START.has(firstCh) || NO_END.has(prevCh);
         if (!forbid && FULL_HANG.has(prevCh)) hang(prevCh, prev.seg);
         if (forbid) noBreak(prev.seg);
         let shrink = 0;
         if (SQUEEZE_AFTER.has(prevCh)) shrink += measure.text(prevCh, prev.seg) / 2;
         if (SQUEEZE_BEFORE.has(firstCh)) shrink += measure.text(firstCh, atom.seg) / 2;
-        glue(0, measure.em(prev.seg) * 0.05, shrink, "", prev.seg);
+        glue(0, measure.em(prev.seg) * INLINE_GAP_STRETCH_EM, shrink, "", prev.seg);
       } else if (
-        (prevCjk && atom.kind === "word") ||
-        ((prev.kind === "word" || prev.kind === "apunct") && atom.kind === "cjk")
+        (prevCjk && (atom.kind === "word" || atom.kind === "atomic")) ||
+        ((prev.kind === "word" || prev.kind === "apunct" || prev.kind === "atomic") &&
+          atom.kind === "cjk")
       ) {
         // 中西文间隙 ~em/8，可断（与前面的悬挂 penalty 构成双候选）。
         const forbid = NO_START.has(firstCh) || (prevCjk && NO_END.has(prevCh));
@@ -258,12 +290,20 @@ export function buildItems(
         if (hangable) hang(prevCh, prev.seg);
         if (forbid) noBreak(prev.seg);
         const em = measure.em(prev.seg);
-        glue(em * 0.125, em * 0.06, em * 0.04, "", prev.seg);
+        glue(em * 0.125, em * INLINE_GAP_STRETCH_EM, em * 0.04, "", prev.seg);
       }
-      // word→word（跨样式或标点后）直接相连：无断点。
+      // word/atomic→word/atomic（无显式空格）直接相连：无断点。
     }
 
     if (atom.kind === "word") pushWord(atom);
+    else if (atom.kind === "atomic")
+      items.push({
+        type: "box",
+        width: atom.width,
+        text: "",
+        seg: atom.seg,
+        atom: atom.atom,
+      });
     else
       items.push({
         type: "box",

@@ -7,7 +7,8 @@
 // 整体重建镜像，因此无需任何“还原原文”的簿记。
 //
 // 排版作用于「仅预览」镜像里的所有合格正文段落，与当前主题是否预先设置
-// text-align: justify 无关；含允许列表之外元素的段落原样保留浏览器换行。
+// text-align: justify 无关；带自身盒模型的行内内容作为不可拆原子参与断行，
+// 含其余允许列表之外元素的段落原样保留浏览器换行。
 
 import { hyphenateSync } from "hyphen/en";
 import { FORCED_BREAK, PAR_FILL_STRETCH, breakLines } from "./kp-core";
@@ -19,8 +20,11 @@ import {
 } from "./inline-items";
 
 const REBUILD_DEBOUNCE_MS = 150;
-// 段落内联允许列表：出现其他元素（图片、代码、file-ref 等）则整段跳过。
+// 可递归保留样式的内联元素；带自身盒模型的代码、公式、file-ref 另作原子处理。
 const ALLOWED_INLINE = new Set(["STRONG", "EM", "DEL", "S", "A", "SPAN", "BR"]);
+const INLINE_MATH_TYPE = "math-inline";
+const INLINE_FILE_REF_TYPE = "file-ref";
+const ATOMIC_INLINE_TAGS = new Set(["CODE"]);
 const SOFT_HYPHEN = "­";
 
 export class TypesetController {
@@ -154,7 +158,7 @@ export class TypesetController {
 
     const collected = collectTokens(p);
     if (!collected) return;
-    const { tokens, segElements } = collected;
+    const { tokens, segElements, atomicElements } = collected;
 
     // 版心取小数宽度：clientWidth 是取整值，会让每行系统性差 1px 以内。
     const lineWidth =
@@ -180,7 +184,7 @@ export class TypesetController {
     // 校正若超出安全范围，说明测量模型与最终 DOM 差异已不是亚像素误差；
     // 此时宁可恢复镜像中的原始段落，让浏览器原生断行，也不强撑出怪异字距。
     const fallbackChildren = Array.from(p.childNodes, (node) => node.cloneNode(true));
-    const rendered = renderLines(p, items, lines, segElements, lineWidth);
+    const rendered = renderLines(p, items, lines, segElements, atomicElements, lineWidth);
     if (!correctResiduals(rendered)) {
       p.classList.remove("amark-tl-paragraph");
       p.replaceChildren(...fallbackChildren);
@@ -213,7 +217,7 @@ export class TypesetController {
     };
 
     for (const token of tokens) {
-      if ("br" in token) continue;
+      if ("br" in token || "atom" in token) continue;
       const font = fonts[token.seg]!;
       queue(" ", font);
       // 与 inline-items 的切分保持一致的近似：单码点（CJK 字/标点）、
@@ -288,12 +292,36 @@ interface CollectedTokens {
   tokens: InlineToken[];
   /** seg 下标 → 样式来源元素（文本节点的直接父元素）。 */
   segElements: HTMLElement[];
+  /** atom 下标 → 原始行内对象（KaTeX 公式、行内代码、file-ref）。 */
+  atomicElements: HTMLElement[];
+}
+
+/**
+ * 行内元素一旦在浏览器原生布局中跨行，getBoundingClientRect() 给出的是
+ * 多个行片段的联合包围盒，可能接近整栏宽。此时用同上下文的绝对定位克隆
+ * 禁止内部换行，测得它作为 KP 原子盒时真正需要的固有宽度。
+ */
+function measureAtomicWidth(el: HTMLElement): number {
+  if (el.getClientRects().length <= 1) return el.getBoundingClientRect().width;
+
+  const probe = el.cloneNode(true) as HTMLElement;
+  probe.style.position = "absolute";
+  probe.style.visibility = "hidden";
+  probe.style.display = "inline-block";
+  probe.style.width = "max-content";
+  probe.style.maxWidth = "none";
+  probe.style.whiteSpace = "pre";
+  el.parentElement?.appendChild(probe);
+  const width = probe.getBoundingClientRect().width;
+  probe.remove();
+  return width;
 }
 
 /** 扁平化段落内联内容；遇到允许列表外的元素或 letter-spacing 时返回 null。 */
-function collectTokens(p: HTMLElement): CollectedTokens | null {
+export function collectTokens(p: HTMLElement): CollectedTokens | null {
   const tokens: InlineToken[] = [];
   const segElements: HTMLElement[] = [];
+  const atomicElements: HTMLElement[] = [];
   const segIndex = new Map<HTMLElement, number>();
 
   const segOf = (el: HTMLElement): number => {
@@ -319,6 +347,20 @@ function collectTokens(p: HTMLElement): CollectedTokens | null {
         tokens.push({ br: true });
         continue;
       }
+      const isAtomic =
+        ATOMIC_INLINE_TAGS.has(child.tagName) ||
+        (child.tagName === "SPAN" &&
+          (child.dataset.type === INLINE_MATH_TYPE || child.dataset.type === INLINE_FILE_REF_TYPE));
+      if (isAtomic) {
+        const atom = atomicElements.length;
+        const width = measureAtomicWidth(child);
+        if (!(width > 0)) return false;
+        atomicElements.push(child);
+        // 样式链从原子的父元素开始；否则渲染时会先克隆原子外壳，再把完整
+        // 原子克隆进去，产生嵌套的双份 DOM。
+        tokens.push({ atom, width, seg: segOf(child.parentElement ?? p) });
+        continue;
+      }
       if (!ALLOWED_INLINE.has(child.tagName)) return false;
       if (child.tagName === "SPAN" && child.dataset.type !== undefined) return false;
       if (getComputedStyle(child).letterSpacing !== "normal") return false;
@@ -328,7 +370,7 @@ function collectTokens(p: HTMLElement): CollectedTokens | null {
   };
 
   if (getComputedStyle(p).letterSpacing !== "normal") return null;
-  return walk(p) ? { tokens, segElements } : null;
+  return walk(p) ? { tokens, segElements, atomicElements } : null;
 }
 
 interface RenderedLine {
@@ -343,11 +385,12 @@ interface RenderedLine {
 
 interface RenderedGap {
   el: HTMLElement;
-  kind: "space" | "margin";
+  kind: "space" | "margin" | "tracking";
   width: number;
   natural: number;
   stretch: number;
   shrink: number;
+  trackingUnits?: number;
 }
 
 function renderLines(
@@ -355,6 +398,7 @@ function renderLines(
   items: TypesetItem[],
   lines: { breakIndex: number; ratio: number }[],
   segElements: HTMLElement[],
+  atomicElements: HTMLElement[],
   lineWidth: number,
 ): RenderedLine[] {
   // seg → 包裹链（文本节点父元素向上到 p，不含 p），用于按原样式重建行内容。
@@ -398,7 +442,38 @@ function renderLines(
     for (let i = start; i < line.breakIndex; i++) {
       const item = items[i]!;
       if (item.type === "box") {
-        innerFor(item.seg).append(item.text);
+        if (item.atom === undefined) {
+          if (item.trackingUnits) {
+            const tracking = document.createElement("span");
+            const width =
+              line.ratio >= 0 ? line.ratio * (item.stretch ?? 0) : line.ratio * (item.shrink ?? 0);
+            tracking.style.letterSpacing = `${width / item.trackingUnits}px`;
+            tracking.textContent = item.text;
+            innerFor(item.seg).appendChild(tracking);
+            gaps.push({
+              el: tracking,
+              kind: "tracking",
+              width,
+              natural: 0,
+              stretch: item.stretch ?? 0,
+              shrink: item.shrink ?? 0,
+              trackingUnits: item.trackingUnits,
+            });
+          } else {
+            innerFor(item.seg).append(item.text);
+          }
+        } else {
+          const atom = atomicElements[item.atom];
+          if (!atom) continue;
+          const clone = atom.cloneNode(true) as HTMLElement;
+          // 镜像只用于阅读：去掉公式的隐藏编辑面板和所有键盘焦点，避免
+          // 没有事件处理器的克隆进入 tab 顺序；原子可视 DOM 与实测宽度不变。
+          clone.querySelector(".math-editor-panel")?.remove();
+          clone
+            .querySelectorAll<HTMLElement>("[tabindex]")
+            .forEach((el) => el.removeAttribute("tabindex"));
+          innerFor(item.seg).appendChild(clone);
+        }
       } else if (item.type === "glue") {
         // 段末/硬换行前的 par-fill glue 只参与算法预算，不是可见间隙；
         // 渲染它会在末行 DOM 中制造一个数百像素的空 margin。
@@ -496,6 +571,8 @@ function correctResiduals(rendered: RenderedLine[]): boolean {
       const corrected = gap.width + delta;
       if (gap.kind === "space") {
         gap.el.style.wordSpacing = `${corrected - gap.natural}px`;
+      } else if (gap.kind === "tracking") {
+        gap.el.style.letterSpacing = `${corrected / (gap.trackingUnits ?? 1)}px`;
       } else {
         gap.el.style.marginLeft = `${corrected}px`;
       }

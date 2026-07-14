@@ -15,6 +15,9 @@ export const PAR_FILL_STRETCH = 1e7;
 export interface KpBox {
   type: "box";
   width: number;
+  /** 盒内不可断内容可参与的微量伸缩（例如西文字间距）。 */
+  stretch?: number;
+  shrink?: number;
 }
 
 export interface KpGlue {
@@ -125,9 +128,10 @@ function tryBreak(
   for (let i = 0; i < n; i++) {
     const it = items[i]!;
     const isGlue = it.type === "glue";
+    const isBox = it.type === "box";
     sumW[i + 1] = sumW[i]! + (it.type === "penalty" ? 0 : it.width);
-    sumS[i + 1] = sumS[i]! + (isGlue ? it.stretch : 0);
-    sumZ[i + 1] = sumZ[i]! + (isGlue ? it.shrink : 0);
+    sumS[i + 1] = sumS[i]! + (isGlue ? it.stretch : isBox ? (it.stretch ?? 0) : 0);
+    sumZ[i + 1] = sumZ[i]! + (isGlue ? it.shrink : isBox ? (it.shrink ?? 0) : 0);
   }
 
   const isLegalBreak = (i: number): boolean => {
