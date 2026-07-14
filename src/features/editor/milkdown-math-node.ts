@@ -14,6 +14,7 @@ import {
   readPreservedMathSource,
   type PreservedMathSource,
 } from "./remark-math-source";
+import { isStandaloneDisplayMath } from "./remark-standalone-display-math";
 
 const KATEX_OPTIONS = { throwOnError: false } as const;
 
@@ -28,6 +29,7 @@ export const mathInlineSchema = $nodeSchema("mathInline", () => ({
   attrs: {
     raw: { default: "", validate: "string" },
     sourceValue: { default: "", validate: "string" },
+    display: { default: false, validate: "boolean" },
   },
   parseDOM: [
     {
@@ -43,7 +45,8 @@ export const mathInlineSchema = $nodeSchema("mathInline", () => ({
     const dom = document.createElement("span");
     dom.dataset.type = MATH_INLINE_DATA_TYPE;
     dom.dataset.value = code;
-    katex.render(code, dom, KATEX_OPTIONS);
+    if (node.attrs.display) dom.dataset.display = "true";
+    katex.render(code, dom, { ...KATEX_OPTIONS, displayMode: Boolean(node.attrs.display) });
     return dom;
   },
   parseMarkdown: {
@@ -54,6 +57,7 @@ export const mathInlineSchema = $nodeSchema("mathInline", () => ({
         .openNode(type, {
           raw: source?.raw ?? "",
           sourceValue: source?.value ?? (node.value as string),
+          display: isStandaloneDisplayMath(node),
         })
         .addText(node.value as string)
         .closeNode();

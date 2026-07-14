@@ -182,9 +182,15 @@ body {
 }
 
 /* LaTeX formulas (see milkdown-math-node.ts / milkdown-math-view.ts). */
-#editor .ProseMirror .math-node-view-block {
+#editor .ProseMirror [data-type="math-block"],
+#editor .ProseMirror [data-type="math-inline"][data-display="true"] {
   margin: 1em 0;
   overflow-x: auto;
+  text-align: center;
+}
+
+#editor .ProseMirror [data-type="math-inline"][data-display="true"] {
+  display: block;
 }
 
 #editor .ProseMirror .math-node-view-inline {
@@ -229,6 +235,11 @@ body {
 #editor .ProseMirror .math-node-view-inline .math-editor-panel {
   display: inline-grid;
   vertical-align: middle;
+}
+
+#editor .ProseMirror [data-type="math-inline"][data-display="true"] .math-editor-panel {
+  display: grid;
+  width: 100%;
 }
 
 #editor .ProseMirror .math-node-view-block .math-editor-panel {

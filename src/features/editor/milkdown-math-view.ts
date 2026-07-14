@@ -91,7 +91,9 @@ class MathNodeView implements NodeView {
 
     this.node = updatedNode;
     this.bindDataAttributes(updatedNode);
-    if (!this.editing) renderMath(this.preview, this.valueOf(updatedNode), this.kind === "block");
+    if (!this.editing) {
+      renderMath(this.preview, this.valueOf(updatedNode), this.isDisplayMode(updatedNode));
+    }
     return true;
   };
 
@@ -137,7 +139,7 @@ class MathNodeView implements NodeView {
   };
 
   private readonly handleInput = (): void => {
-    renderMath(this.draftPreview, this.input.value, this.kind === "block");
+    renderMath(this.draftPreview, this.input.value, this.isDisplayMode(this.node));
   };
 
   private readonly handleInputKeyDown = (event: Event): void => {
@@ -178,7 +180,7 @@ class MathNodeView implements NodeView {
 
     this.editing = true;
     this.input.value = this.valueOf(this.node);
-    renderMath(this.draftPreview, this.input.value, this.kind === "block");
+    renderMath(this.draftPreview, this.input.value, this.isDisplayMode(this.node));
     this.preview.hidden = true;
     this.editorPanel.hidden = false;
     this.dom.classList.add("is-editing");
@@ -197,7 +199,7 @@ class MathNodeView implements NodeView {
     this.editorPanel.hidden = true;
     this.preview.hidden = false;
     this.dom.classList.remove("is-editing");
-    renderMath(this.preview, this.valueOf(this.node), this.kind === "block");
+    renderMath(this.preview, this.valueOf(this.node), this.isDisplayMode(this.node));
 
     if (focusEditor) this.view.focus();
   }
@@ -222,11 +224,16 @@ class MathNodeView implements NodeView {
 
   private bindNode(node: ProseMirrorNode): void {
     this.bindDataAttributes(node);
-    renderMath(this.preview, this.valueOf(node), this.kind === "block");
+    renderMath(this.preview, this.valueOf(node), this.isDisplayMode(node));
   }
 
   private bindDataAttributes(node: ProseMirrorNode): void {
     this.dom.dataset.value = this.valueOf(node);
+    if (this.kind === "inline" && this.isDisplayMode(node)) {
+      this.dom.dataset.display = "true";
+    } else {
+      delete this.dom.dataset.display;
+    }
     if (this.kind === "block" && node.attrs.meta) {
       this.dom.dataset.meta = node.attrs.meta as string;
     } else {
@@ -236,6 +243,10 @@ class MathNodeView implements NodeView {
 
   private valueOf(node: ProseMirrorNode): string {
     return this.kind === "block" ? (node.attrs.value as string) : node.textContent;
+  }
+
+  private isDisplayMode(node: ProseMirrorNode): boolean {
+    return this.kind === "block" || Boolean(node.attrs.display);
   }
 }
 

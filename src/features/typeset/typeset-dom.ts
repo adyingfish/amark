@@ -352,6 +352,11 @@ export function collectTokens(p: HTMLElement): CollectedTokens | null {
         (child.tagName === "SPAN" &&
           (child.dataset.type === INLINE_MATH_TYPE || child.dataset.type === INLINE_FILE_REF_TYPE));
       if (isAtomic) {
+        // A same-line `$$...$$` remains an inline ProseMirror node so its exact
+        // Markdown spelling round-trips, but visually occupies a full line.
+        // Let the browser lay out that paragraph instead of feeding the block-
+        // like formula through KP's inline atom model.
+        if (child.dataset.display === "true") return false;
         const atom = atomicElements.length;
         const width = measureAtomicWidth(child);
         if (!(width > 0)) return false;

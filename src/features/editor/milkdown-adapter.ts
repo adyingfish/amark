@@ -22,6 +22,7 @@ import { htmlImageSchema, imageSrcSchema } from "./milkdown-image-src";
 import { mathBlockSchema, mathInlineSchema } from "./milkdown-math-node";
 import { mathBlockView, mathInlineView } from "./milkdown-math-view";
 import { remarkPreserveMathSource } from "./remark-math-source";
+import { remarkStandaloneDisplayMath } from "./remark-standalone-display-math";
 import { commonmark } from "@milkdown/kit/preset/commonmark";
 import { gfm } from "@milkdown/kit/preset/gfm";
 import { history } from "@milkdown/kit/plugin/history";
@@ -99,6 +100,7 @@ export class MilkdownAdapter implements EditorAdapter {
           { plugin: remarkBreaks, options: {} },
           { plugin: remarkMath, options: {} },
           { plugin: remarkPreserveMathSource, options: {} },
+          { plugin: remarkStandaloneDisplayMath, options: {} },
           { plugin: remarkCommentBlock, options: {} },
           { plugin: remarkFileRef, options: {} },
         ]);

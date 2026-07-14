@@ -31,6 +31,7 @@ import { commentBlockSchema } from "./milkdown-comment-block-node";
 import { mathBlockSchema, mathInlineSchema } from "./milkdown-math-node";
 import { mathBlockView, mathInlineView } from "./milkdown-math-view";
 import { remarkPreserveMathSource } from "./remark-math-source";
+import { remarkStandaloneDisplayMath } from "./remark-standalone-display-math";
 
 async function createEditor(
   markdown: string,
@@ -45,6 +46,7 @@ async function createEditor(
         { plugin: remarkBreaks, options: {} },
         { plugin: remarkMath, options: {} },
         { plugin: remarkPreserveMathSource, options: {} },
+        { plugin: remarkStandaloneDisplayMath, options: {} },
         { plugin: remarkCommentBlock, options: {} },
         { plugin: remarkFileRef, options: {} },
       ]);
@@ -235,6 +237,26 @@ describe("milkdown real round-trip", () => {
 
   it("preserves a double-dollar inline math fence", async () => {
     expect(await roundtrip("Lift($$L$$)")).toBe("Lift($$L$$)\n");
+    expect(await renderHtml("Lift($$L$$)")).toContain('data-type="math-inline"');
+  });
+
+  it("renders a standalone same-line double-dollar formula as display math", async () => {
+    const source = "$$Attention(Q, K, V) = softmax(QK^T)V$$";
+    const html = await renderHtml(source);
+
+    expect(await roundtrip(source)).toBe(`${source}\n`);
+    expect(html).toContain('data-type="math-inline"');
+    expect(html).toContain('data-display="true"');
+    expect(html).toContain('class="katex-display"');
+  });
+
+  it("displays a source-line double-dollar formula after paragraph text", async () => {
+    const source = "最终求加权和，即\n$$Attention(Q, K, V) = softmax(QK^T)V$$";
+    const html = await renderHtml(source);
+
+    expect(await roundtrip(source)).toBe(`${source}\n`);
+    expect(html).toContain('data-display="true"');
+    expect(html).toContain('class="katex-display"');
   });
 
   it("renders inline math as KaTeX output in the DOM", async () => {

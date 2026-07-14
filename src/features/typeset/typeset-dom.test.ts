@@ -17,6 +17,14 @@ const rect = (width: number): DOMRect =>
   }) as DOMRect;
 
 describe("collectTokens", () => {
+  it("显示公式所在段落回退浏览器布局，不作为 KP 行内原子", () => {
+    const p = document.createElement("p");
+    p.style.letterSpacing = "normal";
+    p.innerHTML = '<span data-type="math-inline" data-display="true"></span>';
+
+    expect(collectTokens(p)).toBeNull();
+  });
+
   it("把行内代码、公式和 file-ref 收集为可参与断行的原子盒", () => {
     const p = document.createElement("p");
     p.style.letterSpacing = "normal";
