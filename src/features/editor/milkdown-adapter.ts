@@ -21,6 +21,7 @@ import { commentBlockSchema } from "./milkdown-comment-block-node";
 import { htmlImageSchema, imageSrcSchema } from "./milkdown-image-src";
 import { mathBlockSchema, mathInlineSchema } from "./milkdown-math-node";
 import { mathBlockView, mathInlineView } from "./milkdown-math-view";
+import { mermaidCodeBlockView } from "./milkdown-mermaid-view";
 import { remarkPreserveMathSource } from "./remark-math-source";
 import { remarkStandaloneDisplayMath } from "./remark-standalone-display-math";
 import { commonmark } from "@milkdown/kit/preset/commonmark";
@@ -137,6 +138,9 @@ export class MilkdownAdapter implements EditorAdapter {
       .use(mathBlockSchema)
       .use(mathInlineView)
       .use(mathBlockView)
+      // ```mermaid 代码块渲染为 SVG 图；其他语言保持默认 code_block 渲染，
+      // 见 milkdown-mermaid-view.ts。
+      .use(mermaidCodeBlockView)
       .use(history)
       .use(listener)
       .use(clipboard)
@@ -195,11 +199,15 @@ export class MilkdownAdapter implements EditorAdapter {
   setEditable(editable: boolean): void {
     if (this.editable === editable) return;
 
-    // Leaving WYSIWYG while a formula editor has focus commits it through the
+    // Leaving WYSIWYG while a formula/diagram editor has focus commits it through the
     // NodeView's focusout handler before the ProseMirror surface becomes read-only.
     if (!editable) {
       const activeElement = this.container?.ownerDocument.activeElement;
-      if (activeElement instanceof HTMLElement && activeElement.dataset.mathInput === "true") {
+      if (
+        activeElement instanceof HTMLElement &&
+        (activeElement.dataset.mathInput === "true" ||
+          activeElement.dataset.mermaidInput === "true")
+      ) {
         activeElement.blur();
       }
     }
@@ -218,6 +226,12 @@ export class MilkdownAdapter implements EditorAdapter {
       preview.tabIndex = editable ? 0 : -1;
       preview.setAttribute("aria-disabled", String(!editable));
       preview.title = editable ? "编辑 LaTeX / Edit LaTeX" : "";
+    });
+
+    this.container?.querySelectorAll<HTMLElement>(".mermaid-preview").forEach((preview) => {
+      preview.tabIndex = editable ? 0 : -1;
+      preview.setAttribute("aria-disabled", String(!editable));
+      preview.title = editable ? "编辑 Mermaid / Edit Mermaid" : "";
     });
   }
 

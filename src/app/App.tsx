@@ -703,8 +703,9 @@ export function App(): ReactElement {
 
     const bodyHtml = editor.getHTML();
     const title = (active.split(/[/\\]/).pop() || "document").replace(/\.md$/i, "");
-    const { buildHtmlDocument } = await import("../features/export/export-document");
-    return buildHtmlDocument(bodyHtml, title);
+    const { buildHtmlDocument, renderMermaidBlocksInHtml } =
+      await import("../features/export/export-document");
+    return buildHtmlDocument(await renderMermaidBlocksInHtml(bodyHtml), title);
   }, [applyMarkdownToRichText]);
 
   const handleExport = useCallback(
