@@ -103,6 +103,41 @@ const EXPORT_OVERRIDES = `
 `;
 
 /**
+ * Replace ```mermaid code blocks in serialized editor HTML with rendered SVG
+ * diagrams, so exported documents show the diagram instead of the source
+ * fence. Blocks that fail to render are left untouched (source preserved).
+ * Rendering goes through the same lazy helper as the editor, so colors match
+ * the active app theme.
+ */
+export async function renderMermaidBlocksInHtml(html: string): Promise<string> {
+  if (!html.toLowerCase().includes('data-language="mermaid"')) return html;
+
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const blocks = Array.from(doc.querySelectorAll("pre[data-language]")).filter(
+    (el) => el.getAttribute("data-language")?.trim().toLowerCase() === "mermaid",
+  );
+  if (blocks.length === 0) return html;
+
+  const { renderMermaidDiagram } = await import("../../lib/mermaid-render");
+  let replaced = false;
+  await Promise.all(
+    blocks.map(async (pre) => {
+      try {
+        const svg = await renderMermaidDiagram(pre.textContent ?? "");
+        const container = doc.createElement("div");
+        container.className = "mermaid-diagram";
+        container.innerHTML = svg;
+        pre.replaceWith(container);
+        replaced = true;
+      } catch {
+        // Keep the source block: exporting the raw fence beats losing content.
+      }
+    }),
+  );
+  return replaced ? doc.body.innerHTML : html;
+}
+
+/**
  * Build a complete, self-contained HTML document from rendered editor HTML.
  * The result mirrors the in-app appearance: it carries the active theme class,
  * inlines the app stylesheets, and wraps the content in the editor's DOM shape

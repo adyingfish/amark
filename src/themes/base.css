@@ -290,6 +290,112 @@ body {
   user-select: none;
 }
 
+/* Mermaid diagrams (see milkdown-mermaid-view.ts / lib/mermaid-render.ts). */
+#editor .ProseMirror [data-type="mermaid-block"],
+#editor .ProseMirror .mermaid-diagram {
+  margin: 0.5em 0;
+  overflow-x: auto;
+  text-align: center;
+}
+
+#editor .ProseMirror .mermaid-preview svg,
+#editor .ProseMirror .mermaid-draft-preview svg,
+#editor .ProseMirror .mermaid-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+#editor .ProseMirror .mermaid-preview {
+  border-radius: 4px;
+  outline: 1px solid transparent;
+  outline-offset: 3px;
+}
+
+#editor .ProseMirror .mermaid-preview.is-loading {
+  min-height: 3rem;
+}
+
+#editor .ProseMirror .mermaid-preview.is-error,
+#editor .ProseMirror .mermaid-draft-preview.is-error {
+  padding: 8px 10px;
+  border: 1px dashed var(--border-color);
+  border-radius: 4px;
+  color: #c0392b;
+  font-size: 0.875rem;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.editor-wrapper.mode-wysiwyg #editor .ProseMirror .mermaid-preview {
+  cursor: text;
+}
+
+.editor-wrapper.mode-wysiwyg #editor .ProseMirror .mermaid-preview:hover,
+.editor-wrapper.mode-wysiwyg #editor .ProseMirror .mermaid-preview:focus-visible {
+  outline-color: color-mix(in srgb, var(--link-color) 55%, transparent);
+}
+
+#editor .ProseMirror .mermaid-node-view.ProseMirror-selectednode .mermaid-preview {
+  outline-color: var(--link-color);
+}
+
+#editor .ProseMirror .mermaid-editor-panel {
+  position: relative;
+  min-width: min(32rem, calc(100vw - 120px));
+  padding: 8px;
+  border: 1px solid var(--link-color);
+  border-radius: 6px;
+  background: var(--bg-color);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 14%);
+  display: grid;
+  width: 100%;
+}
+
+#editor .ProseMirror .mermaid-editor-panel[hidden] {
+  display: none !important;
+}
+
+#editor .ProseMirror .mermaid-source-input {
+  width: 100%;
+  min-width: 0;
+  min-height: 8rem;
+  resize: vertical;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  outline: none;
+  background: var(--code-bg);
+  color: var(--text-color);
+  font-family: "SF Mono", "Fira Code", Menlo, monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  padding: 6px 8px;
+}
+
+#editor .ProseMirror .mermaid-source-input:focus {
+  border-color: var(--link-color);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--link-color) 20%, transparent);
+}
+
+#editor .ProseMirror .mermaid-draft-preview {
+  min-height: 2.25rem;
+  margin-top: 8px;
+  padding: 6px 8px;
+  overflow-x: auto;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--code-bg) 62%, transparent);
+  text-align: center;
+}
+
+#editor .ProseMirror .mermaid-editor-hint {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-family: "SF Mono", "Fira Code", Menlo, monospace;
+  font-size: 0.6875rem;
+  line-height: 1.3;
+  text-align: right;
+  user-select: none;
+}
+
 #editor .ProseMirror strong {
   font-weight: 600;
 }
