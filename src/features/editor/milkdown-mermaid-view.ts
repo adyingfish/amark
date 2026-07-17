@@ -7,12 +7,24 @@
 // source editor with a live draft preview, mirroring the math editing UX in
 // milkdown-math-view.ts. Code blocks in any other language fall back to the
 // preset's plain pre/code rendering.
+//
+// Diagrams render lazily: mermaid executes renders serially, so rendering
+// every block eagerly makes first-open and theme-switch cost grow linearly
+// with the diagram count, even for blocks far outside the viewport. A view
+// renders only once it approaches the viewport (shared IntersectionObserver
+// with a pre-render margin); off-screen views needing a refresh (theme
+// switch, source edit) are marked stale and re-render when they become
+// visible. Where IntersectionObserver is missing (e.g. jsdom), every view is
+// treated as visible and renders immediately. One exception: in preview-only
+// typeset mode the real editor is hidden behind a static clone
+// (amark-typeset-active), so pending diagrams render eagerly — the clone
+// needs their SVG and visibility gating cannot run.
 import type { Node as ProseMirrorNode } from "@milkdown/kit/prose/model";
 import { NodeSelection } from "@milkdown/kit/prose/state";
 import type { EditorView, NodeView, NodeViewConstructor } from "@milkdown/kit/prose/view";
 import { codeBlockSchema } from "@milkdown/kit/preset/commonmark";
 import { $view } from "@milkdown/kit/utils";
-import { renderMermaidDiagram } from "../../lib/mermaid-render";
+import { scheduleMermaidRender } from "../../lib/mermaid-render";
 
 export const MERMAID_LANGUAGE = "mermaid";
 export const MERMAID_DATA_TYPE = "mermaid-block";
@@ -28,6 +40,98 @@ const errorMessageOf = (error: unknown): string => {
   return raw.split("\n")[0] || "Unknown error";
 };
 
+// Pre-render margin so a diagram is ready just before it scrolls into view.
+const VISIBILITY_ROOT_MARGIN = "200px";
+
+// One IntersectionObserver shared by all diagram views. Stored alongside the
+// constructor it was built from so test doubles (vi.stubGlobal) trigger a
+// rebuild instead of reusing an observer bound to a stale implementation.
+const visibilityCallbacks = new Map<Element, (visible: boolean) => void>();
+let visibilityObserver: IntersectionObserver | null = null;
+let visibilityObserverCtor: typeof IntersectionObserver | undefined;
+
+const observeVisibility = (
+  element: Element,
+  callback: (visible: boolean) => void,
+): (() => void) => {
+  if (typeof IntersectionObserver === "undefined") {
+    callback(true);
+    return () => {};
+  }
+  if (!visibilityObserver || visibilityObserverCtor !== IntersectionObserver) {
+    visibilityObserver?.disconnect();
+    visibilityObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          visibilityCallbacks.get(entry.target)?.(entry.isIntersecting);
+        }
+      },
+      { rootMargin: VISIBILITY_ROOT_MARGIN },
+    );
+    visibilityObserverCtor = IntersectionObserver;
+    visibilityCallbacks.forEach((_, target) => visibilityObserver?.observe(target));
+  }
+  visibilityCallbacks.set(element, callback);
+  visibilityObserver.observe(element);
+  return () => {
+    visibilityCallbacks.delete(element);
+    visibilityObserver?.unobserve(element);
+  };
+};
+
+// Theme switches only flip a class on <body> (see themes/theme-manager.ts);
+// one shared observer notifies every diagram view.
+const themeSubscribers = new Set<() => void>();
+let themeObserver: MutationObserver | null = null;
+
+const subscribeToThemeChange = (callback: () => void): (() => void) => {
+  themeSubscribers.add(callback);
+  if (!themeObserver) {
+    themeObserver = new MutationObserver(() => {
+      themeSubscribers.forEach((notify) => notify());
+    });
+    themeObserver.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+  }
+  return () => {
+    themeSubscribers.delete(callback);
+    if (themeSubscribers.size === 0) {
+      themeObserver?.disconnect();
+      themeObserver = null;
+    }
+  };
+};
+
+// The preview-only typeset mirror hides the real editor host
+// (`amark-typeset-active` on #editor, see features/typeset/typeset-dom.ts) and
+// shows a static clone. Without a layout box IntersectionObserver never
+// fires, so visibility gating would leave the clone's diagrams unrendered.
+// Watch the host's class list and let affected views render eagerly instead.
+const layoutSubscribers = new Set<() => void>();
+const observedHosts = new Set<Element>();
+let layoutObserver: MutationObserver | null = null;
+
+const subscribeToLayoutContextChange = (
+  host: Element | null,
+  callback: () => void,
+): (() => void) => {
+  layoutSubscribers.add(callback);
+  layoutObserver ??= new MutationObserver(() => {
+    layoutSubscribers.forEach((notify) => notify());
+  });
+  if (host && !observedHosts.has(host)) {
+    observedHosts.add(host);
+    layoutObserver.observe(host, { attributes: true, attributeFilter: ["class"] });
+  }
+  return () => {
+    layoutSubscribers.delete(callback);
+    if (layoutSubscribers.size === 0) {
+      layoutObserver?.disconnect();
+      layoutObserver = null;
+      observedHosts.clear();
+    }
+  };
+};
+
 class MermaidCodeBlockView implements NodeView {
   readonly dom: HTMLElement;
 
@@ -40,7 +144,13 @@ class MermaidCodeBlockView implements NodeView {
   private previewRenderSeq = 0;
   private draftRenderSeq = 0;
   private draftTimer: number | null = null;
-  private readonly themeObserver: MutationObserver;
+  private visible = false;
+  // True while the preview has never rendered or was invalidated (theme
+  // switch, source edit) since its last render.
+  private needsRender = true;
+  private readonly unobserveVisibility: () => void;
+  private readonly unsubscribeTheme: () => void;
+  private readonly unsubscribeLayout: () => void;
 
   constructor(
     initialNode: ProseMirrorNode,
@@ -55,7 +165,7 @@ class MermaidCodeBlockView implements NodeView {
     this.dom.contentEditable = "false";
 
     this.preview = document.createElement("div");
-    this.preview.className = "mermaid-preview";
+    this.preview.className = "mermaid-preview is-pending";
     this.preview.tabIndex = 0;
     this.preview.setAttribute("role", "button");
     this.preview.setAttribute("aria-label", "Edit mermaid diagram");
@@ -83,7 +193,6 @@ class MermaidCodeBlockView implements NodeView {
 
     this.editorPanel.append(this.input, this.draftPreview, hint);
     this.dom.append(this.preview, this.editorPanel);
-    this.renderDiagram(this.preview, this.currentSource());
 
     this.preview.addEventListener("click", this.handlePreviewClick);
     this.preview.addEventListener("keydown", this.handlePreviewKeyDown);
@@ -91,16 +200,14 @@ class MermaidCodeBlockView implements NodeView {
     this.input.addEventListener("keydown", this.handleInputKeyDown);
     this.editorPanel.addEventListener("focusout", this.handleFocusOut);
 
-    // Theme switches only flip a class on <body> (see themes/theme-manager.ts);
-    // re-render so diagram colors follow the new theme variables.
-    this.themeObserver = new MutationObserver(() => {
-      this.renderDiagram(this.preview, this.currentSource());
-      if (this.editing) this.renderDraft();
-    });
-    this.themeObserver.observe(document.body, {
-      attributes: true,
-      attributeFilter: ["class"],
-    });
+    this.unobserveVisibility = observeVisibility(this.dom, this.handleVisibilityChange);
+    this.unsubscribeTheme = subscribeToThemeChange(this.handleThemeChange);
+    // Note: the host is resolved through the EditorView — this.dom is not yet
+    // connected to the document while the constructor runs.
+    this.unsubscribeLayout = subscribeToLayoutContextChange(
+      this.view.dom.closest("#editor"),
+      this.handleLayoutContextChange,
+    );
   }
 
   update = (updatedNode: ProseMirrorNode): boolean => {
@@ -112,7 +219,11 @@ class MermaidCodeBlockView implements NodeView {
     const changed = updatedNode.textContent !== this.node.textContent;
     this.node = updatedNode;
     if (changed && !this.editing) {
-      this.renderDiagram(this.preview, this.currentSource());
+      if (this.visible) {
+        this.renderPreview();
+      } else {
+        this.needsRender = true;
+      }
     }
     return true;
   };
@@ -145,7 +256,9 @@ class MermaidCodeBlockView implements NodeView {
       window.clearTimeout(this.draftTimer);
       this.draftTimer = null;
     }
-    this.themeObserver.disconnect();
+    this.unobserveVisibility();
+    this.unsubscribeTheme();
+    this.unsubscribeLayout();
     this.preview.removeEventListener("click", this.handlePreviewClick);
     this.preview.removeEventListener("keydown", this.handlePreviewKeyDown);
     this.input.removeEventListener("input", this.handleInput);
@@ -228,7 +341,7 @@ class MermaidCodeBlockView implements NodeView {
     this.editorPanel.hidden = true;
     this.preview.hidden = false;
     this.dom.classList.remove("is-editing");
-    this.renderDiagram(this.preview, this.currentSource());
+    this.renderPreview();
 
     if (focusEditor) this.view.focus();
   }
@@ -246,21 +359,68 @@ class MermaidCodeBlockView implements NodeView {
     return this.node.textContent;
   }
 
-  private renderDraft(): void {
-    this.renderDiagram(this.draftPreview, this.input.value);
+  private readonly handleVisibilityChange = (visible: boolean): void => {
+    this.visible = visible;
+    if (visible && this.needsRender && !this.editing) {
+      this.renderPreview();
+    }
+  };
+
+  private readonly handleThemeChange = (): void => {
+    // A never-rendered preview picks up the new theme on its first render.
+    if (this.needsRender) return;
+    if (this.isHiddenForTypeset()) {
+      // Typeset mirror mode rebuilds its clone from our DOM, so refresh right
+      // away — visibility gating cannot run while the real editor is hidden.
+      this.renderPreview(false);
+      return;
+    }
+    if (this.visible) {
+      // Low priority: a diagram scrolling into view may jump ahead of queued
+      // theme refreshes.
+      this.renderPreview(false);
+      if (this.editing) this.renderDraft();
+    } else {
+      this.needsRender = true;
+    }
+  };
+
+  private readonly handleLayoutContextChange = (): void => {
+    // The typeset mirror hides the real editor (display: none) and clones it;
+    // IntersectionObserver stays silent for a hidden element, so a pending
+    // diagram renders eagerly here — the clone needs its SVG.
+    if (this.needsRender && !this.editing && this.isHiddenForTypeset()) {
+      this.renderPreview();
+    }
+  };
+
+  // True while the preview-only typeset mirror hides the real editor surface
+  // (amark-typeset-active on #editor, see features/typeset/typeset-dom.ts).
+  private isHiddenForTypeset(): boolean {
+    return this.dom.closest(".amark-typeset-active") !== null;
   }
 
-  private renderDiagram(target: HTMLElement, source: string): void {
+  private renderPreview(priority = true): void {
+    this.needsRender = false;
+    this.renderDiagram(this.preview, this.currentSource(), priority);
+  }
+
+  private renderDraft(): void {
+    this.renderDiagram(this.draftPreview, this.input.value, true);
+  }
+
+  private renderDiagram(target: HTMLElement, source: string, priority: boolean): void {
     const isDraft = target === this.draftPreview;
     const seq = isDraft ? ++this.draftRenderSeq : ++this.previewRenderSeq;
     const isCurrent = (): boolean =>
       isDraft ? seq === this.draftRenderSeq : seq === this.previewRenderSeq;
 
+    target.classList.remove("is-pending");
     target.classList.add("is-loading");
     target.classList.remove("is-error");
     target.removeAttribute("title");
 
-    renderMermaidDiagram(source)
+    scheduleMermaidRender(source, { priority, cancelled: () => !isCurrent() })
       .then(({ svg, bindFunctions }) => {
         if (!isCurrent()) return;
         target.innerHTML = svg;

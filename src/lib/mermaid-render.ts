@@ -85,3 +85,77 @@ export async function renderMermaidDiagram(source: string): Promise<MermaidRende
     throw error;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Shared render scheduler.
+//
+// Mermaid executes renders serially, so every diagram pays queueing time
+// behind the ones before it. On top of that, each diagram here is only
+// scheduled when it is actually needed (the editor NodeViews gate on viewport
+// visibility), which keeps first-open and theme-switch cost proportional to
+// the number of *visible* diagrams instead of the total. The queue adds two
+// things mermaid's internal serialization cannot: dropping tasks that went
+// stale before they started, and letting user-facing renders (a diagram that
+// just scrolled into view, or the draft being edited) jump ahead of
+// lower-priority background refreshes.
+
+interface ScheduledMermaidRender {
+  source: string;
+  priority: boolean;
+  cancelled?: () => boolean;
+  resolve: (result: MermaidRenderResult) => void;
+  reject: (error: unknown) => void;
+}
+
+const renderQueue: ScheduledMermaidRender[] = [];
+let pumpingQueue = false;
+
+export interface ScheduleMermaidRenderOptions {
+  /** High-priority tasks run before already-queued low-priority ones (FIFO within each class). */
+  priority?: boolean;
+  /** Checked right before a queued task starts; stale tasks are dropped without rendering. */
+  cancelled?: () => boolean;
+}
+
+export function scheduleMermaidRender(
+  source: string,
+  options: ScheduleMermaidRenderOptions = {},
+): Promise<MermaidRenderResult> {
+  return new Promise<MermaidRenderResult>((resolve, reject) => {
+    const task: ScheduledMermaidRender = {
+      source,
+      priority: options.priority ?? false,
+      cancelled: options.cancelled,
+      resolve,
+      reject,
+    };
+    if (task.priority) {
+      let insertAt = renderQueue.length;
+      while (insertAt > 0 && !renderQueue[insertAt - 1].priority) insertAt -= 1;
+      renderQueue.splice(insertAt, 0, task);
+    } else {
+      renderQueue.push(task);
+    }
+    void pumpRenderQueue();
+  });
+}
+
+async function pumpRenderQueue(): Promise<void> {
+  if (pumpingQueue) return;
+  pumpingQueue = true;
+  try {
+    for (let task = renderQueue.shift(); task; task = renderQueue.shift()) {
+      if (task.cancelled?.()) {
+        task.reject(new Error("mermaid render cancelled before it started"));
+        continue;
+      }
+      try {
+        task.resolve(await renderMermaidDiagram(task.source));
+      } catch (error) {
+        task.reject(error);
+      }
+    }
+  } finally {
+    pumpingQueue = false;
+  }
+}

@@ -35,12 +35,16 @@ const wait = (ms: number): Promise<void> =>
     setTimeout(resolve, ms);
   });
 
-async function mountAdapter(markdown: string): Promise<{
+async function mountAdapter(
+  markdown: string,
+  options: { containerId?: string } = {},
+): Promise<{
   adapter: EditorAdapter;
   container: HTMLDivElement;
   updates: string[];
 }> {
   const container = document.createElement("div");
+  if (options.containerId) container.id = options.containerId;
   document.body.appendChild(container);
 
   const adapter = createMilkdownAdapter();
@@ -75,6 +79,44 @@ function openMermaidEditor(container: HTMLElement): HTMLTextAreaElement {
   expect(input).toBeInstanceOf(HTMLTextAreaElement);
   expect(input?.closest<HTMLElement>(".mermaid-editor-panel")?.hidden).toBe(false);
   return input!;
+}
+
+// Minimal IntersectionObserver stand-in: jsdom has no implementation, so
+// visibility-driven tests drive intersections manually.
+class FakeIntersectionObserver {
+  static instances: FakeIntersectionObserver[] = [];
+
+  readonly root = null;
+  readonly rootMargin = "0px";
+  readonly thresholds = [0];
+
+  private readonly observed = new Set<Element>();
+
+  constructor(private readonly callback: IntersectionObserverCallback) {
+    FakeIntersectionObserver.instances.push(this);
+  }
+
+  observe(element: Element): void {
+    this.observed.add(element);
+  }
+
+  unobserve(element: Element): void {
+    this.observed.delete(element);
+  }
+
+  disconnect(): void {
+    this.observed.clear();
+  }
+
+  takeRecords(): IntersectionObserverEntry[] {
+    return [];
+  }
+
+  setVisible(element: Element, isIntersecting: boolean): void {
+    if (!this.observed.has(element)) return;
+    const entry = { target: element, isIntersecting } as IntersectionObserverEntry;
+    this.callback([entry], this as unknown as IntersectionObserver);
+  }
 }
 
 describe("Milkdown mermaid code blocks", () => {
@@ -174,6 +216,84 @@ describe("Milkdown mermaid code blocks", () => {
 
     await vi.waitFor(() => {
       expect(renderMock).toHaveBeenCalled();
+    });
+  });
+});
+
+describe("visibility-aware mermaid rendering", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const latestObserver = (): FakeIntersectionObserver => {
+    const observer =
+      FakeIntersectionObserver.instances[FakeIntersectionObserver.instances.length - 1];
+    expect(observer).toBeDefined();
+    return observer;
+  };
+
+  it("defers an off-viewport diagram until it approaches the viewport", async () => {
+    vi.stubGlobal("IntersectionObserver", FakeIntersectionObserver);
+    const { container } = await mountAdapter("```mermaid\ngraph TD;\n```");
+
+    const renderMock = vi.mocked(mermaid.render);
+    renderMock.mockClear();
+    await wait(50);
+    expect(renderMock).not.toHaveBeenCalled();
+    expect(
+      container
+        .querySelector('[data-type="mermaid-block"] .mermaid-preview')
+        ?.classList.contains("is-pending"),
+    ).toBe(true);
+
+    const view = container.querySelector(".mermaid-node-view");
+    expect(view).not.toBeNull();
+    latestObserver().setVisible(view!, true);
+
+    await waitForDiagram(container);
+    expect(renderMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-renders an off-screen diagram lazily after a theme change", async () => {
+    vi.stubGlobal("IntersectionObserver", FakeIntersectionObserver);
+    const { container } = await mountAdapter("```mermaid\ngraph TD;\n```");
+    const view = container.querySelector(".mermaid-node-view");
+    expect(view).not.toBeNull();
+
+    latestObserver().setVisible(view!, true);
+    await waitForDiagram(container);
+
+    const renderMock = vi.mocked(mermaid.render);
+    renderMock.mockClear();
+    latestObserver().setVisible(view!, false);
+    document.body.classList.add("theme-dark");
+    await wait(50);
+    // Off-screen: the theme switch marks the diagram stale without rendering.
+    expect(renderMock).not.toHaveBeenCalled();
+
+    latestObserver().setVisible(view!, true);
+    await vi.waitFor(() => {
+      expect(renderMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("renders eagerly when the host hides the editor (typeset mirror mode)", async () => {
+    vi.stubGlobal("IntersectionObserver", FakeIntersectionObserver);
+    const { container } = await mountAdapter("```mermaid\ngraph TD;\n```", {
+      containerId: "editor",
+    });
+
+    const renderMock = vi.mocked(mermaid.render);
+    renderMock.mockClear();
+    await wait(50);
+    expect(renderMock).not.toHaveBeenCalled();
+
+    // Preview-only typesetting hides the real ProseMirror behind a static
+    // clone (amark-typeset-active on #editor); pending diagrams must render
+    // eagerly — IntersectionObserver cannot fire without a layout box.
+    container.classList.add("amark-typeset-active");
+    await vi.waitFor(() => {
+      expect(renderMock).toHaveBeenCalledTimes(1);
     });
   });
 });

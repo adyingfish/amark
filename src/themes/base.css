@@ -311,7 +311,8 @@ body {
   outline-offset: 3px;
 }
 
-#editor .ProseMirror .mermaid-preview.is-loading {
+#editor .ProseMirror .mermaid-preview.is-loading,
+#editor .ProseMirror .mermaid-preview.is-pending {
   min-height: 3rem;
 }
 
