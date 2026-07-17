@@ -418,7 +418,6 @@ class MermaidCodeBlockView implements NodeView {
     target.classList.remove("is-pending");
     target.classList.add("is-loading");
     target.classList.remove("is-error");
-    target.removeAttribute("title");
 
     scheduleMermaidRender(source, { priority, cancelled: () => !isCurrent() })
       .then(({ svg, bindFunctions }) => {

@@ -128,8 +128,13 @@ describe("Milkdown mermaid code blocks", () => {
     expect(adapter.getContent()).toBe(markdown);
     // Mermaid's render contract: bindFunctions runs against the element that
     // holds the inserted SVG, installing tooltips/link behaviors.
-    const preview = container.querySelector('[data-type="mermaid-block"] .mermaid-preview');
+    const preview = container.querySelector<HTMLElement>(
+      '[data-type="mermaid-block"] .mermaid-preview',
+    );
     expect(bindFunctionsMock).toHaveBeenCalledWith(preview);
+    // The initial edit hint must survive the render flow (setEditable(true)
+    // is a no-op in the default WYSIWYG mode, so nothing restores it).
+    expect(preview?.title).toBe("编辑 Mermaid / Edit Mermaid");
   });
 
   it("publishes an edited diagram through the adapter change listener", async () => {
@@ -164,10 +169,11 @@ describe("Milkdown mermaid code blocks", () => {
     expect(adapter.getContent()).toBe("```mermaid\ngraph LR;\n  E-->F;\n```\n");
     expect(updates[updates.length - 1]).toBe("```mermaid\ngraph LR;\n  E-->F;\n```\n");
     expect(input.closest<HTMLElement>(".mermaid-editor-panel")?.hidden).toBe(true);
-    expect(
-      container.querySelector<HTMLElement>('[data-type="mermaid-block"] .mermaid-preview')
-        ?.tabIndex,
-    ).toBe(-1);
+    const preview = container.querySelector<HTMLElement>(
+      '[data-type="mermaid-block"] .mermaid-preview',
+    );
+    expect(preview?.tabIndex).toBe(-1);
+    expect(preview?.title).toBe("");
   });
 
   it("cancels an edit with Escape", async () => {
