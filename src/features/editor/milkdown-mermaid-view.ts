@@ -222,7 +222,7 @@ class MermaidCodeBlockView implements NodeView {
       if (this.visible) {
         this.renderPreview();
       } else {
-        this.needsRender = true;
+        this.markPreviewStale();
       }
     }
     return true;
@@ -381,7 +381,7 @@ class MermaidCodeBlockView implements NodeView {
       this.renderPreview(false);
       if (this.editing) this.renderDraft();
     } else {
-      this.needsRender = true;
+      this.markPreviewStale();
     }
   };
 
@@ -403,6 +403,15 @@ class MermaidCodeBlockView implements NodeView {
   private renderPreview(priority = true): void {
     this.needsRender = false;
     this.renderDiagram(this.preview, this.currentSource(), priority);
+  }
+
+  // Invalidate the preview without scheduling a re-render (the off-screen
+  // path). Bumping the sequence is what actually lets the scheduler drop a
+  // still-queued task for this view — otherwise it would render stale
+  // source/theme anyway and waste mermaid's serial render time.
+  private markPreviewStale(): void {
+    this.needsRender = true;
+    this.previewRenderSeq += 1;
   }
 
   private renderDraft(): void {

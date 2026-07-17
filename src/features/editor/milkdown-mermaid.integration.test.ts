@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import mermaid from "mermaid";
+import mermaid, { type RenderResult } from "mermaid";
 import type { EditorAdapter } from "./editor-adapter";
 import { createMilkdownAdapter } from "./milkdown-adapter";
 
@@ -301,5 +301,45 @@ describe("visibility-aware mermaid rendering", () => {
     await vi.waitFor(() => {
       expect(renderMock).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("drops a still-queued re-render when its diagram goes stale off-screen", async () => {
+    vi.stubGlobal("IntersectionObserver", FakeIntersectionObserver);
+    const renderMock = vi.mocked(mermaid.render);
+    renderMock.mockClear();
+    const { container } = await mountAdapter("```mermaid\ngraph TD;\n  A-->B;\n```");
+    const view = container.querySelector(".mermaid-node-view");
+    expect(view).not.toBeNull();
+    latestObserver().setVisible(view!, true);
+    await vi.waitFor(() => expect(renderMock).toHaveBeenCalledTimes(1));
+
+    // Occupy the serial queue: the theme refresh starts and hangs, so the
+    // follow-up refresh has to wait in the queue.
+    let releaseRender!: (result: RenderResult) => void;
+    renderMock.mockImplementationOnce(
+      () =>
+        new Promise<RenderResult>((resolve) => {
+          releaseRender = resolve;
+        }),
+    );
+    document.body.classList.add("theme-dark");
+    await vi.waitFor(() => expect(renderMock).toHaveBeenCalledTimes(2));
+    document.body.classList.add("theme-darker");
+    await wait(50); // let the shared theme observer queue the second refresh
+    expect(renderMock).toHaveBeenCalledTimes(2);
+
+    // The view goes stale off-screen while its second refresh is queued.
+    latestObserver().setVisible(view!, false);
+    document.body.classList.add("theme-darkest");
+    await wait(50);
+
+    releaseRender({ svg: '<svg data-mermaid-mock="true"></svg>', diagramType: "flowchart" });
+    await wait(50);
+    // The queued stale refresh must have been dropped, not rendered.
+    expect(renderMock).toHaveBeenCalledTimes(2);
+
+    // Scrolling back renders once, with the current theme/source.
+    latestObserver().setVisible(view!, true);
+    await vi.waitFor(() => expect(renderMock).toHaveBeenCalledTimes(3));
   });
 });
