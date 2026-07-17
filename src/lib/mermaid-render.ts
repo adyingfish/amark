@@ -10,6 +10,17 @@ import type { MermaidConfig } from "mermaid";
 
 type MermaidApi = typeof import("mermaid").default;
 
+export interface MermaidRenderResult {
+  svg: string;
+  /**
+   * Installs the diagram's interactive behaviors (tooltips, and any
+   * link/click handlers permitted by the active securityLevel). Mermaid's
+   * render contract requires calling this with the element *after* the SVG
+   * has been inserted into the DOM.
+   */
+  bindFunctions?: (element: Element) => void;
+}
+
 let mermaidPromise: Promise<MermaidApi> | null = null;
 let renderSeq = 0;
 
@@ -57,14 +68,16 @@ const currentMermaidConfig = (): MermaidConfig => {
 /**
  * Render mermaid source to an SVG string themed after the active app theme.
  * Rejects with the mermaid parse/render error when the source is invalid.
+ * Callers that insert the SVG into a live DOM must invoke the returned
+ * `bindFunctions` with the container element (see MermaidRenderResult).
  */
-export async function renderMermaidDiagram(source: string): Promise<string> {
+export async function renderMermaidDiagram(source: string): Promise<MermaidRenderResult> {
   const mermaid = await loadMermaid();
   mermaid.initialize(currentMermaidConfig());
   const renderId = `amark-mermaid-${(renderSeq += 1)}`;
   try {
-    const { svg } = await mermaid.render(renderId, source);
-    return svg;
+    const { svg, bindFunctions } = await mermaid.render(renderId, source);
+    return { svg, bindFunctions };
   } catch (error) {
     // Mermaid may leave its temporary render container behind on failure.
     document.getElementById(renderId)?.remove();

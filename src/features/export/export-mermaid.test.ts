@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import mermaid from "mermaid";
 import { renderMermaidBlocksInHtml } from "./export-document";
 
+const bindFunctionsMock = vi.hoisted(() => vi.fn());
+
 vi.mock("mermaid", () => ({
   default: {
     initialize: vi.fn(),
@@ -10,7 +12,7 @@ vi.mock("mermaid", () => ({
       if (source.includes("broken")) {
         throw new Error("Parse error on line 1");
       }
-      return { svg: '<svg data-mermaid-mock="true"></svg>' };
+      return { svg: '<svg data-mermaid-mock="true"></svg>', bindFunctions: bindFunctionsMock };
     }),
   },
 }));
@@ -23,6 +25,9 @@ describe("renderMermaidBlocksInHtml", () => {
     const out = await renderMermaidBlocksInHtml(html);
 
     expect(vi.mocked(mermaid.render)).toHaveBeenCalledWith(expect.any(String), "graph TD;\nA-->B;");
+    // Exported documents are static: no mermaid runtime exists in the output
+    // file, so interactive behaviors are deliberately not bound.
+    expect(bindFunctionsMock).not.toHaveBeenCalled();
     expect(out).toContain('class="mermaid-diagram"');
     expect(out).toContain('data-mermaid-mock="true"');
     expect(out).not.toContain("<pre");

@@ -5,6 +5,8 @@ import mermaid from "mermaid";
 import type { EditorAdapter } from "./editor-adapter";
 import { createMilkdownAdapter } from "./milkdown-adapter";
 
+const bindFunctionsMock = vi.hoisted(() => vi.fn());
+
 vi.mock("mermaid", () => ({
   default: {
     initialize: vi.fn(),
@@ -12,7 +14,7 @@ vi.mock("mermaid", () => ({
       if (source.includes("broken")) {
         throw new Error("Parse error on line 1");
       }
-      return { svg: '<svg data-mermaid-mock="true"></svg>' };
+      return { svg: '<svg data-mermaid-mock="true"></svg>', bindFunctions: bindFunctionsMock };
     }),
   },
 }));
@@ -82,6 +84,10 @@ describe("Milkdown mermaid code blocks", () => {
     await waitForDiagram(container);
 
     expect(adapter.getContent()).toBe(markdown);
+    // Mermaid's render contract: bindFunctions runs against the element that
+    // holds the inserted SVG, installing tooltips/link behaviors.
+    const preview = container.querySelector('[data-type="mermaid-block"] .mermaid-preview');
+    expect(bindFunctionsMock).toHaveBeenCalledWith(preview);
   });
 
   it("publishes an edited diagram through the adapter change listener", async () => {

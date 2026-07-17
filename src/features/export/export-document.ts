@@ -108,6 +108,13 @@ const EXPORT_OVERRIDES = `
  * fence. Blocks that fail to render are left untouched (source preserved).
  * Rendering goes through the same lazy helper as the editor, so colors match
  * the active app theme.
+ *
+ * Exported documents are intentionally static: `bindFunctions` is not invoked
+ * here because the exported file carries no mermaid runtime, so event-based
+ * behaviors (tooltips, click/link handlers) could not fire anyway — and
+ * running it against the app's live document would only leak mermaid's
+ * tooltip element into the editor. This mirrors the in-editor default, where
+ * `securityLevel: "strict"` already strips click/link interactions.
  */
 export async function renderMermaidBlocksInHtml(html: string): Promise<string> {
   if (!html.toLowerCase().includes('data-language="mermaid"')) return html;
@@ -123,7 +130,7 @@ export async function renderMermaidBlocksInHtml(html: string): Promise<string> {
   await Promise.all(
     blocks.map(async (pre) => {
       try {
-        const svg = await renderMermaidDiagram(pre.textContent ?? "");
+        const { svg } = await renderMermaidDiagram(pre.textContent ?? "");
         const container = doc.createElement("div");
         container.className = "mermaid-diagram";
         container.innerHTML = svg;

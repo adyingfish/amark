@@ -261,10 +261,19 @@ class MermaidCodeBlockView implements NodeView {
     target.removeAttribute("title");
 
     renderMermaidDiagram(source)
-      .then((svg) => {
+      .then(({ svg, bindFunctions }) => {
         if (!isCurrent()) return;
         target.innerHTML = svg;
         target.classList.remove("is-loading");
+        // Mermaid's render contract: after the SVG is in the DOM, install the
+        // diagram's interactive behaviors (tooltips; click/link handlers where
+        // the active securityLevel permits them). A failure here must not
+        // discard the already-rendered diagram.
+        try {
+          bindFunctions?.(target);
+        } catch (bindError) {
+          console.warn("mermaid bindFunctions failed", bindError);
+        }
       })
       .catch((error: unknown) => {
         if (!isCurrent()) return;
