@@ -1,8 +1,14 @@
-// remark-standalone-display-math.ts - Mark a source-line `$$...$$` as display math.
+// remark-standalone-display-math.ts - Treat a source-line `$$...$$` as display math.
 //
 // remark-math parses same-line double-dollar fences as inlineMath, even when
-// they occupy their own source line. Keep the mdast node inline so Markdown
-// round-trips exactly, but annotate it for display-mode KaTeX rendering.
+// they occupy their own source line. When such a formula is a paragraph's only
+// content, promote the paragraph to a block math node: an inline atom stranded
+// alone in a paragraph makes ProseMirror append its trailing-break hack, which
+// the block-level formula pushes onto a phantom empty line (and forward-delete
+// there merges the next paragraph onto the formula's source line). The source
+// preserved by remark-math-source keeps the Markdown round-trip exact. When
+// other inline content shares the paragraph, keep the mdast node inline but
+// annotate it for display-mode KaTeX rendering.
 import type { Root } from "mdast";
 import type { Plugin } from "unified";
 import { readPreservedMathSource } from "./remark-math-source";
@@ -11,6 +17,8 @@ const DISPLAY_KEY = "amarkStandaloneDisplayMath";
 
 interface SourceNode {
   type?: string;
+  value?: string;
+  meta?: string | null;
   data?: Record<string, unknown>;
   position?: {
     start?: { offset?: number };
@@ -33,23 +41,42 @@ function occupiesSourceLine(markdown: string, start: number, end: number): boole
   );
 }
 
-function walk(node: SourceNode, markdown: string): void {
-  if (node.type === "inlineMath") {
-    const source = readPreservedMathSource(node);
-    const start = node.position?.start?.offset;
-    const end = node.position?.end?.offset;
-    if (
-      source &&
-      hasDoubleDollarFence(source.raw) &&
-      start !== undefined &&
-      end !== undefined &&
-      occupiesSourceLine(markdown, start, end)
-    ) {
-      node.data = { ...node.data, [DISPLAY_KEY]: true };
-    }
-  }
+function isStandaloneDisplay(node: SourceNode, markdown: string): boolean {
+  if (node.type !== "inlineMath") return false;
+  const source = readPreservedMathSource(node);
+  const start = node.position?.start?.offset;
+  const end = node.position?.end?.offset;
+  return (
+    source !== null &&
+    hasDoubleDollarFence(source.raw) &&
+    start !== undefined &&
+    end !== undefined &&
+    occupiesSourceLine(markdown, start, end)
+  );
+}
 
-  node.children?.forEach((child) => walk(child, markdown));
+function walk(node: SourceNode, markdown: string): void {
+  const children = node.children;
+  if (!children) return;
+
+  children.forEach((child, index) => {
+    const soleChild =
+      child.type === "paragraph" && child.children?.length === 1 ? child.children[0] : undefined;
+    if (soleChild && isStandaloneDisplay(soleChild, markdown)) {
+      children[index] = {
+        type: "math",
+        value: soleChild.value ?? "",
+        meta: null,
+        data: soleChild.data,
+      };
+      return;
+    }
+
+    if (isStandaloneDisplay(child, markdown)) {
+      child.data = { ...child.data, [DISPLAY_KEY]: true };
+    }
+    walk(child, markdown);
+  });
 }
 
 export function isStandaloneDisplayMath(node: { data?: unknown }): boolean {

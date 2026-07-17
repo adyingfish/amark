@@ -193,6 +193,19 @@ body {
   display: block;
 }
 
+/* A paragraph ending with display math receives ProseMirror's trailing-break
+   hack nodes; the block-level formula pushes them onto a phantom empty line
+   that Backspace cannot remove. Hide them. */
+#editor .ProseMirror [data-type="math-inline"][data-display="true"] + br.ProseMirror-trailingBreak,
+#editor .ProseMirror [data-type="math-inline"][data-display="true"] + img.ProseMirror-separator,
+#editor
+  .ProseMirror
+  [data-type="math-inline"][data-display="true"]
+  + img.ProseMirror-separator
+  + br.ProseMirror-trailingBreak {
+  display: none;
+}
+
 #editor .ProseMirror .math-node-view-inline {
   display: inline-block;
   max-width: 100%;

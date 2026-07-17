@@ -240,13 +240,13 @@ describe("milkdown real round-trip", () => {
     expect(await renderHtml("Lift($$L$$)")).toContain('data-type="math-inline"');
   });
 
-  it("renders a standalone same-line double-dollar formula as display math", async () => {
+  it("promotes a standalone same-line double-dollar formula to a math block", async () => {
     const source = "$$Attention(Q, K, V) = softmax(QK^T)V$$";
     const html = await renderHtml(source);
 
     expect(await roundtrip(source)).toBe(`${source}\n`);
-    expect(html).toContain('data-type="math-inline"');
-    expect(html).toContain('data-display="true"');
+    expect(html).toContain('data-type="math-block"');
+    expect(html).not.toContain("<p");
     expect(html).toContain('class="katex-display"');
   });
 
