@@ -24,6 +24,7 @@ import { mathBlockView, mathInlineView } from "./milkdown-math-view";
 import { mermaidCodeBlockView } from "./milkdown-mermaid-view";
 import { remarkPreserveMathSource } from "./remark-math-source";
 import { remarkStandaloneDisplayMath } from "./remark-standalone-display-math";
+import { remarkLatexMath } from "./remark-latex-math";
 import { commonmark } from "@milkdown/kit/preset/commonmark";
 import { gfm } from "@milkdown/kit/preset/gfm";
 import { history } from "@milkdown/kit/plugin/history";
@@ -102,6 +103,7 @@ export class MilkdownAdapter implements EditorAdapter {
           // 单个 `$` 常见于金额和 shell 变量，只允许两个或更多 `$` 组成公式围栏。
           // 源码保留插件必须使用同一选项，避免编辑后又写回单美元定界符。
           { plugin: remarkMath, options: { singleDollarTextMath: false } },
+          { plugin: remarkLatexMath, options: {} },
           { plugin: remarkPreserveMathSource, options: { singleDollarTextMath: false } },
           { plugin: remarkStandaloneDisplayMath, options: {} },
           { plugin: remarkCommentBlock, options: {} },

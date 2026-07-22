@@ -32,6 +32,7 @@ import { mathBlockSchema, mathInlineSchema } from "./milkdown-math-node";
 import { mathBlockView, mathInlineView } from "./milkdown-math-view";
 import { remarkPreserveMathSource } from "./remark-math-source";
 import { remarkStandaloneDisplayMath } from "./remark-standalone-display-math";
+import { remarkLatexMath } from "./remark-latex-math";
 
 async function createEditor(
   markdown: string,
@@ -45,6 +46,7 @@ async function createEditor(
       ctx.set(remarkPluginsCtx, [
         { plugin: remarkBreaks, options: {} },
         { plugin: remarkMath, options: { singleDollarTextMath: false } },
+        { plugin: remarkLatexMath, options: {} },
         { plugin: remarkPreserveMathSource, options: { singleDollarTextMath: false } },
         { plugin: remarkStandaloneDisplayMath, options: {} },
         { plugin: remarkCommentBlock, options: {} },
@@ -243,6 +245,61 @@ describe("milkdown real round-trip", () => {
     expect(await renderHtml(source)).toContain('data-type="math-inline"');
   });
 
+  it("renders and preserves MathJax-style inline math", async () => {
+    const source = "energy: \\(E=mc^2\\)";
+    const html = await renderHtml(source);
+
+    expect(html).toContain('data-type="math-inline"');
+    expect(html).toContain("katex");
+    expect(await roundtrip(source)).toBe(`${source}\n`);
+  });
+
+  it("keeps Markdown-looking content inside MathJax inline math", async () => {
+    const source = "result: \\(a *b* + [c](d)\\)";
+    const html = await renderHtml(source);
+
+    expect(html).toContain('data-type="math-inline"');
+    expect(html).not.toContain("<em>");
+    expect(html).not.toContain("<a ");
+    expect(await roundtrip(source)).toBe(`${source}\n`);
+  });
+
+  it("keeps escaped MathJax-style delimiters as literal text", async () => {
+    const source = "literal: \\\\(not math\\\\)";
+    const html = await renderHtml(source);
+
+    expect(html).not.toContain('data-type="math-inline"');
+    expect(await roundtrip(source)).toBe(`${source}\n`);
+  });
+
+  it("renders and preserves a same-line MathJax display formula", async () => {
+    const source = "\\[E=mc^2\\]";
+    const html = await renderHtml(source);
+
+    expect(html).toContain('data-type="math-block"');
+    expect(html).toContain('class="katex-display"');
+    expect(await roundtrip(source)).toBe(`${source}\n`);
+  });
+
+  it("renders and preserves a multiline MathJax display formula", async () => {
+    const source = "\\[\n\\frac{a_b}{c^2}\n\\]";
+    const html = await renderHtml(source);
+
+    expect(html).toContain('data-type="math-block"');
+    expect(html).toContain('class="katex-display"');
+    expect(await roundtrip(source)).toBe(`${source}\n`);
+  });
+
+  it("splits a MathJax display formula out of surrounding paragraph text", async () => {
+    const source = "before \\[E=mc^2\\] after";
+    const html = await renderHtml(source);
+
+    expect(html).toContain("<p>before</p>");
+    expect(html).toContain('data-type="math-block"');
+    expect(html).toContain("<p>after</p>");
+    expect(await roundtrip(source)).toBe("before\n\n\\[E=mc^2\\]\n\nafter\n");
+  });
+
   it("promotes a standalone same-line double-dollar formula to a math block", async () => {
     const source = "$$Attention(Q, K, V) = softmax(QK^T)V$$";
     const html = await renderHtml(source);
@@ -322,6 +379,14 @@ describe("milkdown real round-trip", () => {
     ).toBe("energy: $$F=ma$$\n");
   });
 
+  it("preserves MathJax delimiters when editing inline math", async () => {
+    expect(
+      await editFormula("energy: \\(E=mc^2\\)", '[data-type="math-inline"]', "F=ma", {
+        key: "Enter",
+      }),
+    ).toBe("energy: \\(F=ma\\)\n");
+  });
+
   it("round-trips a math block unchanged", async () => {
     const src = "$$\na^2 + b^2 = c^2\n$$";
     expect(await roundtrip(src)).toBe(`${src}\n`);
@@ -357,6 +422,15 @@ describe("milkdown real round-trip", () => {
         ctrlKey: true,
       }),
     ).toBe("$$asciimath\nx = y + z\n$$\n");
+  });
+
+  it("preserves MathJax delimiters when editing display math", async () => {
+    expect(
+      await editFormula("\\[\na^2 + b^2 = c^2\n\\]", '[data-type="math-block"]', "x = y", {
+        key: "Enter",
+        ctrlKey: true,
+      }),
+    ).toBe("\\[\nx = y\n\\]\n");
   });
 
   it("does not open the formula editor in a read-only rich view", async () => {

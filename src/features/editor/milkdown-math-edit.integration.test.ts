@@ -63,6 +63,19 @@ describe("Milkdown math WYSIWYG editing", () => {
     expect(updates[updates.length - 1]).toBe("energy: $$F=ma$$\n");
   });
 
+  it("preserves MathJax inline delimiters through the adapter change listener", async () => {
+    const { adapter, container, updates } = await mountAdapter("energy: \\(E=mc^2\\)");
+    const input = openInlineFormula(container);
+
+    input.value = "F=ma";
+    input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+    await wait(DEBOUNCE_GRACE_MS);
+
+    expect(adapter.getContent()).toBe("energy: \\(F=ma\\)\n");
+    expect(updates[updates.length - 1]).toBe("energy: \\(F=ma\\)\n");
+  });
+
   it("commits an active formula before switching the rich view to read-only", async () => {
     const { adapter, container, updates } = await mountAdapter("energy: $$E=mc^2$$");
     const input = openInlineFormula(container);

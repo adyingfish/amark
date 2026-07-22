@@ -42,6 +42,7 @@ function walk(node: unknown, visit: (node: MathSourceNode) => void): void {
 
 function reusableSource(node: MathSourceNode, raw: string): string {
   if (node.type === "inlineMath") return raw;
+  if (raw.startsWith("\\[") && raw.endsWith("\\]")) return raw;
 
   // Positional slices inside block quotes/lists contain the container marker
   // on continuation lines. Reusing that whole slice would make remark add the
@@ -76,6 +77,16 @@ export function mathSourceData(source: PreservedMathSource): JSONRecord {
   };
 }
 
+function latexDelimitedSource(source: PreservedMathSource, value: string): string | null {
+  if (source.raw.startsWith("\\(") && source.raw.endsWith("\\)")) {
+    return `\\(${value}\\)`;
+  }
+  if (source.raw.startsWith("\\[") && source.raw.endsWith("\\]")) {
+    return /\r?\n|\r/.test(source.raw) ? `\\[\n${value}\n\\]` : `\\[${value}\\]`;
+  }
+  return null;
+}
+
 export const remarkPreserveMathSource: Plugin<[ToOptions?], Root> = function (options) {
   const processorData = this.data();
   const toMarkdownExtensions =
@@ -97,6 +108,10 @@ export const remarkPreserveMathSource: Plugin<[ToOptions?], Root> = function (op
         if (source && source.raw && source.value === math.value && source.meta === meta) {
           return source.raw;
         }
+        if (source && source.meta === meta) {
+          const latexSource = latexDelimitedSource(source, math.value);
+          if (latexSource !== null) return latexSource;
+        }
         return canonicalMath(node, parent, state, info);
       },
       inlineMath(node, parent, state, info) {
@@ -104,6 +119,10 @@ export const remarkPreserveMathSource: Plugin<[ToOptions?], Root> = function (op
         const math = node as MathSourceNode;
         if (source && source.raw && source.value === math.value && source.meta === null) {
           return source.raw;
+        }
+        if (source) {
+          const latexSource = latexDelimitedSource(source, math.value);
+          if (latexSource !== null) return latexSource;
         }
         return canonicalInlineMath(node, parent, state, info);
       },
