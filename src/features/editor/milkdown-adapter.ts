@@ -99,8 +99,10 @@ export class MilkdownAdapter implements EditorAdapter {
         // 否则块级 HTML 注释会先被包进段落，无法再识别为独立块。
         ctx.set(remarkPluginsCtx, [
           { plugin: remarkBreaks, options: {} },
-          { plugin: remarkMath, options: {} },
-          { plugin: remarkPreserveMathSource, options: {} },
+          // 单个 `$` 常见于金额和 shell 变量，只允许两个或更多 `$` 组成公式围栏。
+          // 源码保留插件必须使用同一选项，避免编辑后又写回单美元定界符。
+          { plugin: remarkMath, options: { singleDollarTextMath: false } },
+          { plugin: remarkPreserveMathSource, options: { singleDollarTextMath: false } },
           { plugin: remarkStandaloneDisplayMath, options: {} },
           { plugin: remarkCommentBlock, options: {} },
           { plugin: remarkFileRef, options: {} },

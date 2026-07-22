@@ -44,8 +44,8 @@ async function createEditor(
       ctx.set(defaultValueCtx, markdown);
       ctx.set(remarkPluginsCtx, [
         { plugin: remarkBreaks, options: {} },
-        { plugin: remarkMath, options: {} },
-        { plugin: remarkPreserveMathSource, options: {} },
+        { plugin: remarkMath, options: { singleDollarTextMath: false } },
+        { plugin: remarkPreserveMathSource, options: { singleDollarTextMath: false } },
         { plugin: remarkStandaloneDisplayMath, options: {} },
         { plugin: remarkCommentBlock, options: {} },
         { plugin: remarkFileRef, options: {} },
@@ -231,13 +231,16 @@ describe("milkdown real round-trip", () => {
     expect(html).toContain('data-type="html"');
   });
 
-  it("round-trips inline math unchanged", async () => {
-    expect(await roundtrip("energy: $E=mc^2$")).toBe("energy: $E=mc^2$\n");
-  });
-
-  it("preserves a double-dollar inline math fence", async () => {
+  it("round-trips double-dollar inline math unchanged", async () => {
     expect(await roundtrip("Lift($$L$$)")).toBe("Lift($$L$$)\n");
     expect(await renderHtml("Lift($$L$$)")).toContain('data-type="math-inline"');
+  });
+
+  it("supports longer inline math fences", async () => {
+    const source = "Lift($$$$L$$$$)";
+
+    expect(await roundtrip(source)).toBe(`${source}\n`);
+    expect(await renderHtml(source)).toContain('data-type="math-inline"');
   });
 
   it("promotes a standalone same-line double-dollar formula to a math block", async () => {
@@ -260,53 +263,63 @@ describe("milkdown real round-trip", () => {
   });
 
   it("renders inline math as KaTeX output in the DOM", async () => {
-    const html = await renderHtml("energy: $E=mc^2$");
+    const html = await renderHtml("energy: $$E=mc^2$$");
 
     expect(html).toContain('data-type="math-inline"');
     expect(html).toContain("katex");
-    expect(html).not.toContain("$E=mc^2$");
+    expect(html).not.toContain("$$E=mc^2$$");
   });
 
-  it("keeps a lone currency amount as text and escapes it when serializing", async () => {
+  it("keeps a lone currency amount as text without rewriting it", async () => {
     const source = "The license costs $100.";
     const html = await renderHtml(source);
 
     expect(html).not.toContain('data-type="math-inline"');
     expect(html).toContain("$100");
-    expect(await roundtrip(source)).toBe("The license costs \\$100.\n");
+    expect(await roundtrip(source)).toBe(`${source}\n`);
   });
 
-  it("keeps explicitly escaped currency pairs as text", async () => {
+  it("normalizes now-unnecessary currency escapes without treating them as math", async () => {
     const source = "Budget: \\$100 for design and \\$200 for review.";
     const html = await renderHtml(source);
 
     expect(html).not.toContain('data-type="math-inline"');
     expect(html).toContain("$100");
     expect(html).toContain("$200");
+    expect(await roundtrip(source)).toBe("Budget: $100 for design and $200 for review.\n");
+  });
+
+  it("keeps unescaped paired dollar amounts as text without rewriting them", async () => {
+    const source = "Budget: $100 for design and $200 for review.";
+    const html = await renderHtml(source);
+
+    expect(html).not.toContain('data-type="math-inline"');
+    expect(html).toContain("$100 for design and $200");
     expect(await roundtrip(source)).toBe(`${source}\n`);
   });
 
-  it("treats unescaped paired dollar amounts as math delimiters", async () => {
-    const html = await renderHtml("Budget: $100 for design and $200 for review.");
-
-    expect(html).toContain('data-type="math-inline"');
-    expect(html).toContain('data-value="100 for design and "');
-  });
-
-  it("keeps a deliberately closed numeric expression as inline math", async () => {
-    const source = "The exact result is $100$.";
+  it("keeps single-dollar formula-like text literal", async () => {
+    const source = "The exact result is $E=mc^2$.";
     const html = await renderHtml(source);
 
-    expect(html).toContain('data-type="math-inline"');
+    expect(html).not.toContain('data-type="math-inline"');
+    expect(await roundtrip(source)).toBe(`${source}\n`);
+  });
+
+  it("keeps shell-style dollar variables literal", async () => {
+    const source = "Copy $HOME into $BACKUP before continuing.";
+    const html = await renderHtml(source);
+
+    expect(html).not.toContain('data-type="math-inline"');
     expect(await roundtrip(source)).toBe(`${source}\n`);
   });
 
   it("edits inline math directly in the WYSIWYG view", async () => {
     expect(
-      await editFormula("energy: $E=mc^2$", '[data-type="math-inline"]', "F=ma", {
+      await editFormula("energy: $$E=mc^2$$", '[data-type="math-inline"]', "F=ma", {
         key: "Enter",
       }),
-    ).toBe("energy: $F=ma$\n");
+    ).toBe("energy: $$F=ma$$\n");
   });
 
   it("round-trips a math block unchanged", async () => {
@@ -347,7 +360,7 @@ describe("milkdown real round-trip", () => {
   });
 
   it("does not open the formula editor in a read-only rich view", async () => {
-    const { container, editor } = await createEditor("energy: $E=mc^2$");
+    const { container, editor } = await createEditor("energy: $$E=mc^2$$");
     editor.action((ctx) => ctx.get(editorViewCtx).setProps({ editable: () => false }));
 
     const preview = container.querySelector<HTMLElement>('[data-type="math-inline"] .math-preview');

@@ -6,7 +6,7 @@
 // its positional offsets and reuse it while the semantic value is unchanged.
 import type { Root } from "mdast";
 import type { JSONRecord } from "@milkdown/kit/transformer";
-import { mathToMarkdown } from "mdast-util-math";
+import { mathToMarkdown, type ToOptions } from "mdast-util-math";
 import type { Plugin } from "unified";
 
 const SOURCE_KEY = "amarkMathSource";
@@ -76,11 +76,11 @@ export function mathSourceData(source: PreservedMathSource): JSONRecord {
   };
 }
 
-export const remarkPreserveMathSource: Plugin<[], Root> = function () {
+export const remarkPreserveMathSource: Plugin<[ToOptions?], Root> = function (options) {
   const processorData = this.data();
   const toMarkdownExtensions =
     processorData.toMarkdownExtensions || (processorData.toMarkdownExtensions = []);
-  const canonical = mathToMarkdown();
+  const canonical = mathToMarkdown(options);
   const canonicalMath = canonical.handlers?.math;
   const canonicalInlineMath = canonical.handlers?.inlineMath;
 

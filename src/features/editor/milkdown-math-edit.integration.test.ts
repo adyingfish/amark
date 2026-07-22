@@ -51,7 +51,7 @@ function openInlineFormula(container: HTMLElement): HTMLInputElement {
 
 describe("Milkdown math WYSIWYG editing", () => {
   it("publishes an edited formula through the adapter change listener", async () => {
-    const { adapter, container, updates } = await mountAdapter("energy: $E=mc^2$");
+    const { adapter, container, updates } = await mountAdapter("energy: $$E=mc^2$$");
     const input = openInlineFormula(container);
 
     input.value = "F=ma";
@@ -59,12 +59,12 @@ describe("Milkdown math WYSIWYG editing", () => {
     input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
     await wait(DEBOUNCE_GRACE_MS);
 
-    expect(adapter.getContent()).toBe("energy: $F=ma$\n");
-    expect(updates[updates.length - 1]).toBe("energy: $F=ma$\n");
+    expect(adapter.getContent()).toBe("energy: $$F=ma$$\n");
+    expect(updates[updates.length - 1]).toBe("energy: $$F=ma$$\n");
   });
 
   it("commits an active formula before switching the rich view to read-only", async () => {
-    const { adapter, container, updates } = await mountAdapter("energy: $E=mc^2$");
+    const { adapter, container, updates } = await mountAdapter("energy: $$E=mc^2$$");
     const input = openInlineFormula(container);
 
     input.value = "p=mv";
@@ -72,13 +72,13 @@ describe("Milkdown math WYSIWYG editing", () => {
     adapter.setEditable(false);
     await wait(DEBOUNCE_GRACE_MS);
 
-    expect(adapter.getContent()).toBe("energy: $p=mv$\n");
-    expect(updates[updates.length - 1]).toBe("energy: $p=mv$\n");
+    expect(adapter.getContent()).toBe("energy: $$p=mv$$\n");
+    expect(updates[updates.length - 1]).toBe("energy: $$p=mv$$\n");
     expect(input.closest<HTMLElement>(".math-editor-panel")?.hidden).toBe(true);
   });
 
   it("cancels an edit with Escape", async () => {
-    const { adapter, container, updates } = await mountAdapter("energy: $E=mc^2$");
+    const { adapter, container, updates } = await mountAdapter("energy: $$E=mc^2$$");
     const input = openInlineFormula(container);
 
     input.value = "discarded";
@@ -86,7 +86,7 @@ describe("Milkdown math WYSIWYG editing", () => {
     input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
     await wait(DEBOUNCE_GRACE_MS);
 
-    expect(adapter.getContent()).toBe("energy: $E=mc^2$");
+    expect(adapter.getContent()).toBe("energy: $$E=mc^2$$");
     expect(updates).toEqual([]);
     expect(input.closest<HTMLElement>(".math-editor-panel")?.hidden).toBe(true);
   });
