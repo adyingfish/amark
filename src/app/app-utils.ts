@@ -16,11 +16,20 @@ export function formatRelativeTime(timestamp: number, locale: Locale): string {
   return `${hours}h`;
 }
 
+// Drop the `\\?\` (and `\\?\UNC\`) extended-length prefix that
+// `std::fs::canonicalize` adds on Windows; no-op on non-Windows / clean paths.
+function stripExtendedPathPrefix(path: string): string {
+  return path.replace(/^\\\\\?\\UNC\\/, "\\\\").replace(/^\\\\\?\\/, "");
+}
+
 export function formatDisplayPath(
   filePath: string,
   rootPath: string | null,
   workspaceName: string | null,
 ): string {
+  // Strip the verbatim prefix so the root-prefix test below can match, and so
+  // the trailing `\`→`/` pass doesn't render it as the `//?/` seen in the wild.
+  filePath = stripExtendedPathPrefix(filePath);
   if (rootPath && filePath.startsWith(rootPath)) {
     const rootName = workspaceName ?? basename(rootPath);
     const relative = filePath.slice(rootPath.length).replace(/^[/\\]/, "");

@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 /// whose prefix breaks the file watcher and leaks into the UI. Strip the
 /// verbatim prefix back to a plain path. No-op on non-Windows / non-verbatim
 /// paths.
-fn simplify_verbatim(path: PathBuf) -> PathBuf {
+pub(crate) fn simplify_verbatim(path: PathBuf) -> PathBuf {
     #[cfg(windows)]
     {
         if let Some(s) = path.to_str() {

@@ -215,6 +215,10 @@ async fn open_path_in_new_window(
     let canonical = tokio::fs::canonicalize(&file_path)
         .await
         .map_err(|e| e.to_string())?;
+    // Strip Windows' `\\?\` verbatim prefix (canonicalize adds it) so the
+    // queued path lines up with the de-verbatimized paths `scan_workspace`
+    // yields — otherwise the active file's key drifts from the tree's keys.
+    let canonical = crate::services::workspace_scan::simplify_verbatim(canonical);
 
     launch_files
         .lock()
@@ -382,14 +386,19 @@ pub fn run() {
             // them so the frontend can pull and preview them via
             // `take_launch_files` once the webview is ready, instead of
             // starting blank. Only existing regular files are kept, and paths
-            // are canonicalized so they match what `scan_workspace` yields for
-            // the file's folder (see `take_launch_files`).
+            // are canonicalized — and stripped of Windows' `\\?\` verbatim
+            // prefix, the way `scan_workspace` does — so they match what the
+            // folder scan yields (see `take_launch_files`).
             let cli_files: Vec<String> = std::env::args()
                 .skip(1)
                 .filter(|a| !a.starts_with('-'))
                 .map(PathBuf::from)
                 .filter(|p| p.is_file())
-                .map(|p| p.canonicalize().unwrap_or(p))
+                .map(|p| {
+                    crate::services::workspace_scan::simplify_verbatim(
+                        p.canonicalize().unwrap_or(p),
+                    )
+                })
                 .map(|p| p.to_string_lossy().into_owned())
                 .collect();
 
