@@ -77,28 +77,31 @@ body {
 }
 
 #editor .ProseMirror h2 {
-  font-size: 1.5em;
+  font-size: 24px;
   font-weight: 600;
   margin-top: 1.25em;
   margin-bottom: 0.5em;
-  line-height: 1.3;
+  line-height: 32px;
   padding-bottom: 0.25em;
   border-bottom: 1px solid var(--border-color);
 }
 
 #editor .ProseMirror h3 {
-  font-size: 1.25em;
+  font-size: 20px;
   font-weight: 600;
   margin-top: 1em;
   margin-bottom: 0.5em;
+  line-height: 28px;
 }
 
 #editor .ProseMirror h4,
 #editor .ProseMirror h5,
 #editor .ProseMirror h6 {
+  font-size: 16px;
   font-weight: 600;
   margin-top: 1em;
   margin-bottom: 0.5em;
+  line-height: 24px;
 }
 
 /* 标题折行时让各行长度更均衡（仅对折成多行的标题有效，单行标题无副作用）。 */
