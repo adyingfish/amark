@@ -2,9 +2,11 @@ import type { UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Copy as CopyIcon, Minus, Square, X } from "lucide-react";
 import { type ReactElement, useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
 import { useI18n } from "../../features/i18n/i18n-context";
+import type { AgentState } from "../app-utils";
 
-export function WindowControls(): ReactElement {
+export function WindowControls({ agentState }: { agentState: AgentState }): ReactElement {
   const { t } = useI18n();
   const [maximized, setMaximized] = useState(false);
   const appWindow = getCurrentWindow();
@@ -36,6 +38,11 @@ export function WindowControls(): ReactElement {
 
   return (
     <div className="window-controls">
+      <span
+        id="agent-dot"
+        className={cn("agent-dot", agentState !== "idle" && agentState)}
+        title="Agent Activity"
+      />
       <button
         type="button"
         className="window-control window-control-minimize"

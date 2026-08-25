@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { ActivityPanel } from "./components/ActivityPanel";
 import { ExternalUpdateBanner } from "./components/ExternalUpdateBanner";
 import { MenuBar } from "./components/MenuBar";
+import { OutlineView } from "./components/OutlineView";
 import { SaveButton } from "./components/SaveButton";
 import { StatusBar } from "./components/StatusBar";
 import { TabsBar } from "./components/TabsBar";
@@ -93,6 +94,7 @@ import {
   looksLikeMarkdownRef,
 } from "../services/file-ref";
 import type { EditorViewMode } from "../ui/view-mode-switch";
+import type { MarkdownOutlineItem } from "../features/outline/markdown-outline";
 
 interface LaunchFile {
   path: string;
@@ -105,6 +107,7 @@ interface ThemeResult {
 }
 
 type ToastKind = "success" | "error";
+type SidebarView = "workspace" | "outline";
 
 const VIEW_MODE_STORAGE_KEY = "amark-view-mode";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "amark-sidebar-collapsed";
@@ -136,6 +139,7 @@ export function App(): ReactElement {
   ]);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set());
   const [sidebarCollapsed, setSidebarCollapsed] = useState(loadSidebarCollapsed);
+  const [sidebarView, setSidebarView] = useState<SidebarView>("workspace");
   const [viewMode, setViewMode] = useState<EditorViewMode>(loadSavedViewMode);
   const [toast, setToast] = useState<{ message: string; kind: ToastKind; visible: boolean } | null>(
     null,
@@ -270,6 +274,33 @@ export function App(): ReactElement {
     const active = activePathRef.current;
     if (!active) return;
     updateDocumentContent(active, event.currentTarget.value);
+  }, []);
+
+  const handleOutlineHeadingClick = useCallback((heading: MarkdownOutlineItem): void => {
+    const mode = viewModeRef.current;
+    if (mode === "source" || mode === "split") {
+      const source = sourceViewRef.current;
+      if (!source) return;
+
+      source.focus();
+      source.setSelectionRange(heading.offset, heading.offset);
+      const styles = window.getComputedStyle(source);
+      const fontSize = Number.parseFloat(styles.fontSize) || 16;
+      const lineHeight = Number.parseFloat(styles.lineHeight) || fontSize * 1.5;
+      source.scrollTo({
+        top: Math.max(0, (heading.line - 1) * lineHeight - source.clientHeight * 0.2),
+        behavior: "smooth",
+      });
+      return;
+    }
+
+    const host = editorHostRef.current;
+    const richSurface =
+      host?.querySelector<HTMLElement>(".ProseMirror.amark-typeset-mirror") ??
+      host?.querySelector<HTMLElement>(".ProseMirror:not(.amark-typeset-mirror)");
+    const renderedHeading =
+      richSurface?.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6")[heading.headingIndex];
+    renderedHeading?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
   // Shared tail end of "open a locally-resolved path": in-workspace files
@@ -1112,40 +1143,64 @@ export function App(): ReactElement {
         </span>
         <span className="workspace-actions">
           <ViewModeSwitch mode={viewMode} onChange={handleViewModeChange} />
-          <WindowControls />
+          <WindowControls agentState={agentState} />
         </span>
       </div>
 
       <div className="main-container">
         <aside ref={sidebarRef} className={cn("sidebar", sidebarCollapsed && "collapsed")}>
-          <div className="sidebar-header" title={workspace.rootPath ?? ""}>
-            {workspace.name ?? t("sidebar.workspace")}
+          <div className="sidebar-view-tabs" role="tablist" aria-label={t("sidebar.workspace")}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={sidebarView === "workspace"}
+              className={cn("sidebar-view-tab", sidebarView === "workspace" && "active")}
+              title={workspace.rootPath ?? t("sidebar.workspace")}
+              onClick={() => setSidebarView("workspace")}
+            >
+              {t("sidebar.workspace")}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={sidebarView === "outline"}
+              className={cn("sidebar-view-tab", sidebarView === "outline" && "active")}
+              onClick={() => setSidebarView("outline")}
+            >
+              {t("sidebar.outline")}
+            </button>
           </div>
-          <div className="file-tree-container">
-            {rootNode ? (
-              <WorkspaceTreeView
-                files={[rootNode]}
-                activeFilePath={workspace.activeFilePath}
-                rootPath={workspace.rootPath}
-                expandedFolders={expandedFolders}
-                onFileClick={openFileFromTree}
-                onToggleFolder={handleToggleFolder}
-                onNewFile={handleTreeNewFile}
-                onNewFolder={handleTreeNewFolder}
-                onRenameFile={handleTreeRename}
-                onRenameFolder={handleTreeRenameFolder}
-                onDeleteFile={handleTreeDelete}
-              />
-            ) : (
-              <div className="workspace-empty">
-                <p>{t("sidebar.openFolderToStart")}</p>
-                <Button id="btn-sidebar-open" type="button" onClick={handleOpenFolder}>
-                  {t("toolbar.openFolder")}
-                </Button>
+          {sidebarView === "workspace" ? (
+            <>
+              <div className="file-tree-container">
+                {rootNode ? (
+                  <WorkspaceTreeView
+                    files={[rootNode]}
+                    activeFilePath={workspace.activeFilePath}
+                    rootPath={workspace.rootPath}
+                    expandedFolders={expandedFolders}
+                    onFileClick={openFileFromTree}
+                    onToggleFolder={handleToggleFolder}
+                    onNewFile={handleTreeNewFile}
+                    onNewFolder={handleTreeNewFolder}
+                    onRenameFile={handleTreeRename}
+                    onRenameFolder={handleTreeRenameFolder}
+                    onDeleteFile={handleTreeDelete}
+                  />
+                ) : (
+                  <div className="workspace-empty">
+                    <p>{t("sidebar.openFolderToStart")}</p>
+                    <Button id="btn-sidebar-open" type="button" onClick={handleOpenFolder}>
+                      {t("toolbar.openFolder")}
+                    </Button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-          <ActivityPanel changes={recentChanges} onFileClick={handleRecentFileClick} />
+              <ActivityPanel changes={recentChanges} onFileClick={handleRecentFileClick} />
+            </>
+          ) : (
+            <OutlineView filePath={activePath} onHeadingClick={handleOutlineHeadingClick} />
+          )}
         </aside>
         <div
           ref={sidebarResizerRef}
@@ -1196,7 +1251,7 @@ export function App(): ReactElement {
         </div>
       </div>
 
-      <StatusBar agentState={agentState} />
+      <StatusBar />
       <div className="toast-host" aria-live="polite">
         {toast ? (
           <div className={cn("toast", `toast-${toast.kind}`, toast.visible && "visible")}>

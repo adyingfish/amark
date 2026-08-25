@@ -49,11 +49,17 @@ const dictionary = {
 
   // Sidebar
   "sidebar.workspace": { zh: "工作区", en: "Workspace" },
+  "sidebar.outline": { zh: "大纲", en: "Outline" },
   "sidebar.resizer": {
     zh: "拖拽调整侧栏宽度，双击复位",
     en: "Drag to resize sidebar, double-click to reset",
   },
   "sidebar.openFolderToStart": { zh: "打开一个文件夹开始使用", en: "Open a folder to start" },
+
+  // Outline
+  "outline.navigation": { zh: "当前文档大纲", en: "Current document outline" },
+  "outline.noDocument": { zh: "未打开 Markdown 文件", en: "No Markdown file is open" },
+  "outline.noHeadings": { zh: "当前文档没有标题", en: "This document has no headings" },
 
   // Editor
   "editor.splitDivider": {

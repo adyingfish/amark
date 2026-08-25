@@ -1,16 +1,15 @@
 // StatusBar.tsx - Bottom status bar; subscribes only to the workspace/document
 // slices it needs instead of re-rendering with the whole app shell.
 import { type ReactElement, useSyncExternalStore } from "react";
-import { cn } from "@/lib/utils";
 import { documentStore } from "../../features/document/document-store";
 import { useI18n } from "../../features/i18n/i18n-context";
 import { workspaceStore } from "../../features/workspace/workspace-store";
-import { type AgentState, formatDisplayPath, formatSaveStatusForDocument } from "../app-utils";
+import { formatDisplayPath, formatSaveStatusForDocument } from "../app-utils";
 
 const subscribeWorkspace = (onChange: () => void) => workspaceStore.subscribe(onChange);
 const subscribeDocuments = (onChange: () => void) => documentStore.subscribe(onChange);
 
-export function StatusBar({ agentState }: { agentState: AgentState }): ReactElement {
+export function StatusBar(): ReactElement {
   const { t, locale } = useI18n();
   const activePath = useSyncExternalStore(subscribeWorkspace, () =>
     workspaceStore.getActiveFilePath(),
@@ -36,11 +35,6 @@ export function StatusBar({ agentState }: { agentState: AgentState }): ReactElem
       <span className="status-left">{statusLeft}</span>
       <span className="status-right">
         <span className="document-status">{statusRight}</span>
-        <span
-          id="agent-dot"
-          className={cn("agent-dot", agentState !== "idle" && agentState)}
-          title="Agent Activity"
-        />
       </span>
     </div>
   );
