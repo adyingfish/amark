@@ -29,6 +29,7 @@ import { ViewModeSwitch } from "./components/ViewModeSwitch";
 import { WindowControls } from "./components/WindowControls";
 import { WorkspaceTreeView } from "./components/WorkspaceTreeView";
 import type { AgentState } from "./app-utils";
+import { navigateToOutlineHeading } from "./outline-navigation";
 import { t as translateStatic, useI18n } from "../features/i18n/i18n-context";
 import { languageStore } from "../features/i18n/language-store";
 import {
@@ -277,30 +278,12 @@ export function App(): ReactElement {
   }, []);
 
   const handleOutlineHeadingClick = useCallback((heading: MarkdownOutlineItem): void => {
-    const mode = viewModeRef.current;
-    if (mode === "source" || mode === "split") {
-      const source = sourceViewRef.current;
-      if (!source) return;
-
-      source.focus();
-      source.setSelectionRange(heading.offset, heading.offset);
-      const styles = window.getComputedStyle(source);
-      const fontSize = Number.parseFloat(styles.fontSize) || 16;
-      const lineHeight = Number.parseFloat(styles.lineHeight) || fontSize * 1.5;
-      source.scrollTo({
-        top: Math.max(0, (heading.line - 1) * lineHeight - source.clientHeight * 0.2),
-        behavior: "smooth",
-      });
-      return;
-    }
-
-    const host = editorHostRef.current;
-    const richSurface =
-      host?.querySelector<HTMLElement>(".ProseMirror.amark-typeset-mirror") ??
-      host?.querySelector<HTMLElement>(".ProseMirror:not(.amark-typeset-mirror)");
-    const renderedHeading =
-      richSurface?.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6")[heading.headingIndex];
-    renderedHeading?.scrollIntoView({ behavior: "smooth", block: "start" });
+    navigateToOutlineHeading({
+      heading,
+      mode: viewModeRef.current,
+      source: sourceViewRef.current,
+      richHost: editorHostRef.current,
+    });
   }, []);
 
   // Shared tail end of "open a locally-resolved path": in-workspace files
