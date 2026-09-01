@@ -35,7 +35,7 @@ body {
   /* Single source of truth for the text column width shared by every view
      mode (WYSIWYG, source, preview-only). Keeping it on one variable means
      the three surfaces can never drift apart again. */
-  --editor-content-width: 780px;
+  --editor-content-width: 42em;
   background: var(--bg-color);
   color: var(--text-color);
 }
@@ -51,8 +51,8 @@ body {
   margin: 0 auto;
   min-height: 100%;
   font-family: var(--editor-font-family);
-  font-size: 16px;
-  line-height: 1.75;
+  font-size: 17px;
+  line-height: 1.6;
   color: var(--text-color);
   /* 段落断行改用更优的启发式：消除段尾孤字、整理右边缘。继承给正文/列表/
      引用等子元素，标题另用 balance 覆盖。不支持的内核（如较旧 WebKitGTK）
@@ -77,31 +77,31 @@ body {
 }
 
 #editor .ProseMirror h2 {
-  font-size: 24px;
+  font-size: 1.5em;
   font-weight: 600;
   margin-top: 1.25em;
   margin-bottom: 0.5em;
-  line-height: 32px;
+  line-height: 1.35;
   padding-bottom: 0.25em;
   border-bottom: 1px solid var(--border-color);
 }
 
 #editor .ProseMirror h3 {
-  font-size: 20px;
+  font-size: 1.25em;
   font-weight: 600;
   margin-top: 1em;
   margin-bottom: 0.5em;
-  line-height: 28px;
+  line-height: 1.4;
 }
 
 #editor .ProseMirror h4,
 #editor .ProseMirror h5,
 #editor .ProseMirror h6 {
-  font-size: 16px;
+  font-size: 1em;
   font-weight: 600;
   margin-top: 1em;
   margin-bottom: 0.5em;
-  line-height: 24px;
+  line-height: 1.5;
 }
 
 /* 标题折行时让各行长度更均衡（仅对折成多行的标题有效，单行标题无副作用）。 */
@@ -661,7 +661,7 @@ body.theme-literary {
 }
 
 body.theme-literary #editor .ProseMirror {
-  line-height: 1.9;
+  line-height: 1.6;
   /* 段落级断行评分与行尾标点悬挂（悬挂仅 WebKit 生效），见 theme-academic 处说明 */
   text-wrap: pretty;
   hanging-punctuation: allow-end;
@@ -753,7 +753,7 @@ body.theme-academic {
 
 /* 正文两端对齐 + 连字符，贴近 LaTeX 默认排版 */
 body.theme-academic #editor .ProseMirror {
-  line-height: 1.7;
+  line-height: 1.6;
   text-align: justify;
   hyphens: auto;
   /* 段落级断行评分：Chromium(WebView2) 优化段末 4 行消灭孤词，

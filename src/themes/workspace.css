@@ -1357,8 +1357,8 @@
   background: var(--bg-color, #fff);
   color: var(--text-color, #24292e);
   font-family: var(--editor-font-family);
-  font-size: 16px;
-  line-height: 1.7;
+  font-size: 17px;
+  line-height: 1.6;
   padding: 16px 40px 40px;
   tab-size: 2;
   white-space: pre-wrap;

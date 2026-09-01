@@ -95,7 +95,7 @@ async function collectAppStyles(): Promise<string> {
 const EXPORT_OVERRIDES = `
   html, body { height: auto; overflow: visible; }
   #editor { height: auto; overflow: visible; padding: 40px; }
-  #editor .ProseMirror { min-height: auto; max-width: 780px; margin: 0 auto; }
+  #editor .ProseMirror { min-height: auto; max-width: 42em; margin: 0 auto; }
   @media print {
     #editor { padding: 0; }
     #editor .ProseMirror { max-width: none; }
