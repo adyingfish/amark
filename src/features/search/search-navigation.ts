@@ -40,10 +40,8 @@ export function scrollTextareaOffsetIntoView(textarea: HTMLTextAreaElement, offs
     mirror.style[property] = styles[property];
   }
 
-  mirror.textContent = textarea.value.slice(
-    0,
-    Math.max(0, Math.min(offset, textarea.value.length)),
-  );
+  const clampedOffset = Math.max(0, Math.min(offset, textarea.value.length));
+  mirror.textContent = textarea.value.slice(0, clampedOffset);
   const marker = document.createElement("span");
   marker.dataset.searchTextareaMarker = "true";
   marker.style.display = "inline-block";
@@ -52,8 +50,29 @@ export function scrollTextareaOffsetIntoView(textarea: HTMLTextAreaElement, offs
   mirror.appendChild(marker);
   document.body.appendChild(mirror);
 
-  const target = marker.offsetTop - textarea.clientHeight * 0.3;
+  const markerTop = marker.offsetTop;
+  const lineHeight = Number.parseFloat(styles.lineHeight) || 24;
+  const logicalLineTop =
+    (textarea.value.slice(0, clampedOffset).split("\n").length - 1) * lineHeight;
+  const proportionalTop =
+    textarea.value.length === 0
+      ? 0
+      : (clampedOffset / textarea.value.length) * textarea.scrollHeight;
+  // Some WebKit builds report zero for an off-screen inline marker while the
+  // textarea is being revealed. In that frame, use a conservative estimate
+  // instead of leaving a later match above or below the viewport.
+  const measuredTop =
+    markerTop > 0 || clampedOffset === 0 ? markerTop : Math.max(logicalLineTop, proportionalTop);
+  const target = measuredTop - textarea.clientHeight * 0.3;
   const maxScrollTop = Math.max(0, textarea.scrollHeight - textarea.clientHeight);
   textarea.scrollTop = Math.max(0, Math.min(target, maxScrollTop));
   mirror.remove();
+}
+
+/** Explicitly reveal the active rich-text decoration after the DOM updates. */
+export function scrollActiveSearchMatchIntoView(root: ParentNode): boolean {
+  const activeMatch = root.querySelector<HTMLElement>(".search-match-active");
+  if (!activeMatch) return false;
+  activeMatch.scrollIntoView({ block: "center", inline: "nearest" });
+  return true;
 }

@@ -70,8 +70,7 @@ describe("TypesetController search navigation", () => {
     document.body.replaceChildren();
   });
 
-  it("scrolls the visible mirror when the active search decoration changes", async () => {
-    vi.useFakeTimers();
+  it("refreshes and scrolls the visible mirror without waiting for the debounce", () => {
     vi.stubGlobal(
       "ResizeObserver",
       class {
@@ -95,8 +94,7 @@ describe("TypesetController search navigation", () => {
         ".ProseMirror:not(.amark-typeset-mirror) .search-match",
       )!;
       realMatch.classList.add("search-match-active");
-      await Promise.resolve();
-      await vi.advanceTimersByTimeAsync(150);
+      controller.refreshSearchMirror();
 
       expect(host.querySelector(".amark-typeset-mirror .search-match-active")).not.toBeNull();
       expect(scrollIntoView).toHaveBeenCalledWith({ block: "center", inline: "nearest" });

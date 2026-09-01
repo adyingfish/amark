@@ -1209,6 +1209,11 @@ export function App(): ReactElement {
       }
     } else {
       count = editor?.setSearch(findQuery, findCaseSensitive, requestedIndex) ?? 0;
+      if (viewMode === "preview-only") {
+        // Preview displays a typeset clone instead of ProseMirror's real DOM.
+        // Refresh it synchronously so its active highlight can be revealed now.
+        typesetRef.current?.refreshSearchMirror();
+      }
       // A workspace result can match Markdown syntax that has no rendered text
       // counterpart. Fall back to source mode only for that exact-jump case.
       if (targetStart !== null && count === 0 && sourceMatches.length > 0) {

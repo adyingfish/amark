@@ -91,6 +91,15 @@ export class TypesetController {
     this.lastSignature = "";
   }
 
+  /** Rebuild the visible preview mirror immediately after search decorations change. */
+  refreshSearchMirror(): void {
+    if (!this.active) return;
+    // Search navigation must not depend on the MutationObserver debounce: a
+    // second navigation can otherwise arrive before the first mirror exists.
+    this.lastSignature = "";
+    this.rebuild();
+  }
+
   private realProseMirror(): HTMLElement | null {
     return this.host.querySelector<HTMLElement>(".ProseMirror:not(.amark-typeset-mirror)");
   }
@@ -114,15 +123,9 @@ export class TypesetController {
     }
     if (pm !== this.observedPm) {
       this.pmObserver.disconnect();
-      // 搜索切换当前结果时可能只更新装饰 span 的 class，因此也观察 class；
-      // 根节点的聚焦 class 不在 innerHTML 签名中，仍会被下方的签名检查消化。
-      this.pmObserver.observe(pm, {
-        childList: true,
-        characterData: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ["class"],
-      });
+      // 搜索导航由 refreshSearchMirror() 主动同步；这里只观察内容变化，
+      // 避免 ProseMirror 聚焦和 NodeView 状态 class 触发无谓的整篇重排。
+      this.pmObserver.observe(pm, { childList: true, characterData: true, subtree: true });
       this.observedPm = pm;
     }
 

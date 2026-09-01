@@ -36,6 +36,7 @@ import {
   findProseMirrorMatches,
   setSearchDecorations,
 } from "./milkdown-search";
+import { scrollActiveSearchMatchIntoView } from "../search/search-navigation";
 import { normalizeMatchIndex } from "../search/search-utils";
 
 const TASK_CHECKBOX_HIT_WIDTH = 28;
@@ -267,6 +268,10 @@ export class MilkdownAdapter implements EditorAdapter {
       const ranges = findProseMirrorMatches(view.state.doc, query, caseSensitive);
       count = ranges.length;
       setSearchDecorations(view, ranges, normalizeMatchIndex(activeIndex, count));
+      // ProseMirror's transaction scroll request can be lost when its scroll
+      // container or visibility changes in the same frame. Dispatch updates
+      // the decoration DOM synchronously, so reveal the actual active mark too.
+      scrollActiveSearchMatchIntoView(view.dom);
     });
     return count;
   }
