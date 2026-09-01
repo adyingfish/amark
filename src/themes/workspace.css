@@ -390,6 +390,229 @@
   font-size: 14px;
 }
 
+/* ── Workspace Search ────────────────────────────────────────────────────── */
+
+.search-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.workspace-search-form {
+  flex-shrink: 0;
+  padding: 10px 10px 8px;
+  border-bottom: 1px solid var(--border-color, #e1e4e8);
+}
+
+.workspace-search-input-wrap {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 6px 0 9px;
+  border: 1px solid var(--border-color, #d1d5da);
+  border-radius: 5px;
+  background: var(--bg-color, #fff);
+  color: var(--text-muted, #6a737d);
+}
+
+.workspace-search-input-wrap:focus-within {
+  border-color: var(--primary-color, #0969da);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-color, #0969da) 18%, transparent);
+}
+
+.workspace-search-input-wrap input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-color, #24292e);
+  font-size: 13px;
+}
+
+.workspace-search-input-wrap input:disabled {
+  cursor: default;
+}
+
+.workspace-search-option,
+.document-find-action {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted, #6a737d);
+  cursor: pointer;
+}
+
+.workspace-search-option:hover:not(:disabled),
+.workspace-search-option.active,
+.document-find-action:hover:not(:disabled),
+.document-find-action.active {
+  background: var(--hover-bg, #e1e4e8);
+  color: var(--text-color, #24292e);
+}
+
+.workspace-search-option:disabled,
+.document-find-action:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.search-spinner {
+  animation: search-spin 0.8s linear infinite;
+}
+
+@keyframes search-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.workspace-search-results {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: none;
+}
+
+.workspace-search-summary {
+  padding: 9px 12px 7px;
+  color: var(--text-muted, #6a737d);
+  font-size: 11px;
+}
+
+.workspace-search-group {
+  padding: 0 0 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color, #e1e4e8) 70%, transparent);
+}
+
+.workspace-search-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px 5px;
+  color: var(--text-color, #24292e);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.workspace-search-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-search-file-count,
+.workspace-search-line {
+  color: var(--text-muted, #6a737d);
+  font-family: "SF Mono", "Fira Code", Menlo, monospace;
+  font-size: 10px;
+}
+
+.workspace-search-result {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 7px;
+  padding: 5px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted, #6a737d);
+  cursor: pointer;
+  text-align: left;
+}
+
+.workspace-search-result:hover,
+.workspace-search-result:focus-visible {
+  outline: 0;
+  background: var(--hover-bg, #e1e4e8);
+}
+
+.workspace-search-line {
+  padding-top: 1px;
+  text-align: right;
+}
+
+.workspace-search-preview {
+  overflow: hidden;
+  font-family: "SF Mono", "Fira Code", Menlo, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-search-preview mark,
+#editor .search-match {
+  border-radius: 2px;
+  background: var(--search-match-bg, #fff1a8);
+  color: var(--text-color, #24292e);
+}
+
+#editor .search-match-active {
+  background: var(--search-active-bg, #f2c94c);
+  outline: 1px solid var(--warning-color, #d29922);
+}
+
+.workspace-search-empty {
+  padding: 28px 18px;
+  color: var(--text-muted, #6a737d);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* ── Current Document Find ───────────────────────────────────────────────── */
+
+.document-find-bar {
+  position: sticky;
+  top: 8px;
+  z-index: 6;
+  width: min(430px, calc(100% - 24px));
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 8px 12px -46px auto;
+  padding: 5px 6px 5px 10px;
+  border: 1px solid var(--border-color, #d1d5da);
+  border-radius: 6px;
+  background: var(--bg-color, #fff);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16);
+}
+
+.external-update-banner.visible + .document-find-bar {
+  top: 52px;
+}
+
+.document-find-bar input {
+  flex: 1;
+  min-width: 70px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-color, #24292e);
+  font-size: 13px;
+}
+
+.document-find-count {
+  min-width: 50px;
+  flex-shrink: 0;
+  color: var(--text-muted, #6a737d);
+  font-size: 11px;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .workspace-empty {
   padding: 16px;
   text-align: center;

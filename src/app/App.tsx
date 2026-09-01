@@ -19,10 +19,12 @@ import { FolderOpen, PanelLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ActivityPanel } from "./components/ActivityPanel";
+import { DocumentFindBar } from "./components/DocumentFindBar";
 import { ExternalUpdateBanner } from "./components/ExternalUpdateBanner";
 import { MenuBar } from "./components/MenuBar";
 import { OutlineView } from "./components/OutlineView";
 import { SaveButton } from "./components/SaveButton";
+import { SearchPanel } from "./components/SearchPanel";
 import { StatusBar } from "./components/StatusBar";
 import { TabsBar } from "./components/TabsBar";
 import { ViewModeSwitch } from "./components/ViewModeSwitch";
@@ -96,6 +98,18 @@ import {
 } from "../services/file-ref";
 import type { EditorViewMode } from "../ui/view-mode-switch";
 import type { MarkdownOutlineItem } from "../features/outline/markdown-outline";
+import { searchWorkspace } from "../features/search/search-controller";
+import type {
+  WorkspaceSearchMatch,
+  WorkspaceSearchResult,
+  WorkspaceSearchStatus,
+} from "../features/search/search-types";
+import {
+  findClosestMatchIndex,
+  findTextMatches,
+  normalizeMatchIndex,
+} from "../features/search/search-utils";
+import { scrollTextareaOffsetIntoView } from "../features/search/search-navigation";
 
 interface LaunchFile {
   path: string;
@@ -108,7 +122,8 @@ interface ThemeResult {
 }
 
 type ToastKind = "success" | "error";
-type SidebarView = "workspace" | "outline";
+type SidebarView = "workspace" | "outline" | "search";
+type SearchSurface = "source" | "rich";
 
 const VIEW_MODE_STORAGE_KEY = "amark-view-mode";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "amark-sidebar-collapsed";
@@ -146,6 +161,21 @@ export function App(): ReactElement {
     null,
   );
   const [agentState, setAgentState] = useState<AgentState>("idle");
+  const [documentRevision, setDocumentRevision] = useState(0);
+  const [findOpen, setFindOpen] = useState(false);
+  const [findFocusRequest, setFindFocusRequest] = useState(0);
+  const [findQuery, setFindQuery] = useState("");
+  const [findCaseSensitive, setFindCaseSensitive] = useState(false);
+  const [findActiveIndex, setFindActiveIndex] = useState(0);
+  const [findMatchCount, setFindMatchCount] = useState(0);
+  const [workspaceSearchQuery, setWorkspaceSearchQuery] = useState("");
+  const [workspaceSearchCaseSensitive, setWorkspaceSearchCaseSensitive] = useState(false);
+  const [workspaceSearchStatus, setWorkspaceSearchStatus] = useState<WorkspaceSearchStatus>("idle");
+  const [workspaceSearchResult, setWorkspaceSearchResult] = useState<WorkspaceSearchResult>({
+    matches: [],
+    truncated: false,
+  });
+  const [workspaceSearchFocusRequest, setWorkspaceSearchFocusRequest] = useState(0);
 
   const editorRef = useRef<EditorAdapter | null>(null);
   const editorHostRef = useRef<HTMLDivElement | null>(null);
@@ -167,6 +197,9 @@ export function App(): ReactElement {
   const toastRemoveTimerRef = useRef<number | null>(null);
   const agentCooldownTimerRef = useRef<number | null>(null);
   const agentIdleTimerRef = useRef<number | null>(null);
+  const lastSearchSurfaceRef = useRef<SearchSurface>("rich");
+  const pendingSearchStartRef = useRef<number | null>(null);
+  const workspaceSearchRequestRef = useRef(0);
 
   activePathRef.current = workspace.activeFilePath;
   viewModeRef.current = viewMode;
@@ -270,6 +303,60 @@ export function App(): ReactElement {
       return next;
     });
   }, []);
+
+  const openDocumentFind = useCallback((): void => {
+    if (!activePathRef.current) return;
+    if (viewModeRef.current === "source") lastSearchSurfaceRef.current = "source";
+    if (viewModeRef.current === "wysiwyg" || viewModeRef.current === "preview-only") {
+      lastSearchSurfaceRef.current = "rich";
+    }
+    setFindOpen(true);
+    setFindFocusRequest((current) => current + 1);
+  }, []);
+
+  const closeDocumentFind = useCallback((): void => {
+    setFindOpen(false);
+    setFindMatchCount(0);
+    pendingSearchStartRef.current = null;
+    editorRef.current?.clearSearch();
+  }, []);
+
+  const openWorkspaceSearch = useCallback((): void => {
+    setSidebarCollapsed(false);
+    localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, "false");
+    setSidebarView("search");
+    setWorkspaceSearchFocusRequest((current) => current + 1);
+  }, []);
+
+  const navigateDocumentFind = useCallback(
+    (direction: -1 | 1): void => {
+      setFindActiveIndex((current) => normalizeMatchIndex(current + direction, findMatchCount));
+    },
+    [findMatchCount],
+  );
+
+  const handleWorkspaceSearchResultClick = useCallback(
+    (match: WorkspaceSearchMatch): void => {
+      void (async () => {
+        await openFileFromTree(match.file_path, match.file_name);
+        const markdown = documentStore.getMarkdown(match.file_path) ?? "";
+        const sourceMatches = findTextMatches(
+          markdown,
+          workspaceSearchQuery,
+          workspaceSearchCaseSensitive,
+        );
+        pendingSearchStartRef.current = match.start;
+        lastSearchSurfaceRef.current =
+          viewModeRef.current === "source" || viewModeRef.current === "split" ? "source" : "rich";
+        setFindQuery(workspaceSearchQuery);
+        setFindCaseSensitive(workspaceSearchCaseSensitive);
+        setFindActiveIndex(findClosestMatchIndex(sourceMatches, match.start));
+        setFindOpen(true);
+        setFindFocusRequest((current) => current + 1);
+      })();
+    },
+    [workspaceSearchCaseSensitive, workspaceSearchQuery],
+  );
 
   const handleSourceInput = useCallback((event: ReactFormEvent<HTMLTextAreaElement>): void => {
     const active = activePathRef.current;
@@ -767,6 +854,8 @@ export function App(): ReactElement {
     saveActiveDocumentAs,
     handleExport,
     importCustomTheme,
+    openDocumentFind,
+    openWorkspaceSearch,
     showToast,
   });
   appActionsRef.current = {
@@ -777,6 +866,8 @@ export function App(): ReactElement {
     saveActiveDocumentAs,
     handleExport,
     importCustomTheme,
+    openDocumentFind,
+    openWorkspaceSearch,
     showToast,
   };
 
@@ -990,6 +1081,8 @@ export function App(): ReactElement {
     void register("menu-new", () => newUntitledFile());
     void register("menu-save", () => appActionsRef.current.saveActiveDocument());
     void register("menu-save-as", () => appActionsRef.current.saveActiveDocumentAs());
+    void register("menu-find", () => appActionsRef.current.openDocumentFind());
+    void register("menu-find-workspace", () => appActionsRef.current.openWorkspaceSearch());
     void register("menu-export-html", () => appActionsRef.current.handleExport("html"));
     void register("menu-export-pdf", () => appActionsRef.current.handleExport("pdf"));
     void register("menu-import-theme", () => appActionsRef.current.importCustomTheme());
@@ -1072,6 +1165,110 @@ export function App(): ReactElement {
     return documentStore.subscribe(syncActiveDocumentFromStores);
   }, [syncActiveDocumentFromStores]);
 
+  // Search results must follow in-memory edits, but subscribing through React
+  // all the time would re-render the entire app on every keystroke. Only relay
+  // document-store revisions while either search surface is active.
+  useEffect(() => {
+    if (!findOpen && !(sidebarView === "search" && workspaceSearchQuery.length > 0)) return;
+    return documentStore.subscribe(() => setDocumentRevision((current) => current + 1));
+  }, [findOpen, sidebarView, workspaceSearchQuery]);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!findOpen || !activePath || findQuery.length === 0) {
+      editor?.clearSearch();
+      setFindMatchCount(0);
+      return;
+    }
+
+    const markdown = documentStore.getMarkdown(activePath) ?? "";
+    const sourceMatches = findTextMatches(markdown, findQuery, findCaseSensitive);
+    const targetStart = pendingSearchStartRef.current;
+    const requestedIndex =
+      targetStart === null
+        ? normalizeMatchIndex(findActiveIndex, sourceMatches.length)
+        : findClosestMatchIndex(sourceMatches, targetStart);
+    if (requestedIndex !== findActiveIndex) setFindActiveIndex(requestedIndex);
+
+    const surface =
+      viewMode === "source"
+        ? "source"
+        : viewMode === "wysiwyg" || viewMode === "preview-only"
+          ? "rich"
+          : lastSearchSurfaceRef.current;
+
+    let count = 0;
+    if (surface === "source") {
+      editor?.clearSearch();
+      count = sourceMatches.length;
+      const activeMatch = sourceMatches[normalizeMatchIndex(requestedIndex, count)];
+      const source = sourceViewRef.current;
+      if (source && activeMatch) {
+        source.setSelectionRange(activeMatch.start, activeMatch.end);
+        scrollTextareaOffsetIntoView(source, activeMatch.start);
+      }
+    } else {
+      count = editor?.setSearch(findQuery, findCaseSensitive, requestedIndex) ?? 0;
+      // A workspace result can match Markdown syntax that has no rendered text
+      // counterpart. Fall back to source mode only for that exact-jump case.
+      if (targetStart !== null && count === 0 && sourceMatches.length > 0) {
+        lastSearchSurfaceRef.current = "source";
+        handleViewModeChange("source");
+        return;
+      }
+    }
+
+    pendingSearchStartRef.current = null;
+    setFindMatchCount((current) => (current === count ? current : count));
+    const normalizedIndex = normalizeMatchIndex(requestedIndex, count);
+    if (normalizedIndex !== findActiveIndex) setFindActiveIndex(normalizedIndex);
+  }, [
+    activePath,
+    documentRevision,
+    findActiveIndex,
+    findCaseSensitive,
+    findOpen,
+    findQuery,
+    handleViewModeChange,
+    viewMode,
+  ]);
+
+  useEffect(() => {
+    const requestId = ++workspaceSearchRequestRef.current;
+    if (sidebarView !== "search" || !workspace.rootPath || workspaceSearchQuery.length === 0) {
+      setWorkspaceSearchStatus("idle");
+      setWorkspaceSearchResult({ matches: [], truncated: false });
+      return;
+    }
+
+    const rootPath = workspace.rootPath;
+    setWorkspaceSearchStatus("loading");
+    setWorkspaceSearchResult({ matches: [], truncated: false });
+    const timer = window.setTimeout(() => {
+      searchWorkspace(rootPath, workspaceSearchQuery, workspaceSearchCaseSensitive)
+        .then((result) => {
+          if (requestId !== workspaceSearchRequestRef.current) return;
+          setWorkspaceSearchResult(result);
+          setWorkspaceSearchStatus("ready");
+        })
+        .catch((error) => {
+          if (requestId !== workspaceSearchRequestRef.current) return;
+          console.error("Workspace search failed:", error);
+          setWorkspaceSearchResult({ matches: [], truncated: false });
+          setWorkspaceSearchStatus("error");
+        });
+    }, 150);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    documentRevision,
+    sidebarView,
+    workspace.files,
+    workspace.rootPath,
+    workspaceSearchCaseSensitive,
+    workspaceSearchQuery,
+  ]);
+
   useEffect(() => {
     return () => {
       if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
@@ -1152,6 +1349,15 @@ export function App(): ReactElement {
             >
               {t("sidebar.outline")}
             </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={sidebarView === "search"}
+              className={cn("sidebar-view-tab", sidebarView === "search" && "active")}
+              onClick={() => setSidebarView("search")}
+            >
+              {t("sidebar.search")}
+            </button>
           </div>
           {sidebarView === "workspace" ? (
             <>
@@ -1181,8 +1387,20 @@ export function App(): ReactElement {
               </div>
               <ActivityPanel changes={recentChanges} onFileClick={handleRecentFileClick} />
             </>
-          ) : (
+          ) : sidebarView === "outline" ? (
             <OutlineView filePath={activePath} onHeadingClick={handleOutlineHeadingClick} />
+          ) : (
+            <SearchPanel
+              rootPath={workspace.rootPath}
+              query={workspaceSearchQuery}
+              caseSensitive={workspaceSearchCaseSensitive}
+              status={workspaceSearchStatus}
+              result={workspaceSearchResult}
+              focusRequest={workspaceSearchFocusRequest}
+              onQueryChange={setWorkspaceSearchQuery}
+              onCaseSensitiveChange={setWorkspaceSearchCaseSensitive}
+              onResultClick={handleWorkspaceSearchResultClick}
+            />
           )}
         </aside>
         <div
@@ -1206,6 +1424,27 @@ export function App(): ReactElement {
             className={cn("editor-wrapper", `mode-${viewMode}`, !hasDocument && "no-document")}
           >
             <ExternalUpdateBanner filePath={activePath} onReload={reloadDocumentFromDisk} />
+            <DocumentFindBar
+              open={findOpen && hasDocument}
+              focusRequest={findFocusRequest}
+              query={findQuery}
+              caseSensitive={findCaseSensitive}
+              matchCount={findMatchCount}
+              activeIndex={findActiveIndex}
+              onQueryChange={(query) => {
+                pendingSearchStartRef.current = null;
+                setFindQuery(query);
+                setFindActiveIndex(0);
+              }}
+              onCaseSensitiveChange={(caseSensitive) => {
+                pendingSearchStartRef.current = null;
+                setFindCaseSensitive(caseSensitive);
+                setFindActiveIndex(0);
+              }}
+              onPrevious={() => navigateDocumentFind(-1)}
+              onNext={() => navigateDocumentFind(1)}
+              onClose={closeDocumentFind}
+            />
             <div ref={editorPanesRef} className="editor-panes">
               <textarea
                 ref={sourceViewRef}
@@ -1214,6 +1453,9 @@ export function App(): ReactElement {
                 wrap="soft"
                 onInput={handleSourceInput}
                 onClick={handleSourceLinkClick}
+                onFocus={() => {
+                  lastSearchSurfaceRef.current = "source";
+                }}
               />
               <div
                 ref={splitDividerRef}
@@ -1227,6 +1469,9 @@ export function App(): ReactElement {
                 id="editor"
                 className="editor-host"
                 onClickCapture={handlePreviewLinkClick}
+                onFocusCapture={() => {
+                  lastSearchSurfaceRef.current = "rich";
+                }}
               />
             </div>
             <div className="empty-state" />

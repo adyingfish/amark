@@ -31,6 +31,12 @@ import { history } from "@milkdown/kit/plugin/history";
 import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
 import { clipboard } from "@milkdown/kit/plugin/clipboard";
 import { replaceAll } from "@milkdown/kit/utils";
+import {
+  configureSearchPlugin,
+  findProseMirrorMatches,
+  setSearchDecorations,
+} from "./milkdown-search";
+import { normalizeMatchIndex } from "../search/search-utils";
 
 const TASK_CHECKBOX_HIT_WIDTH = 28;
 
@@ -93,6 +99,7 @@ export class MilkdownAdapter implements EditorAdapter {
       .config((ctx) => {
         ctx.set(rootCtx, container);
         ctx.set(defaultValueCtx, "");
+        configureSearchPlugin(ctx);
 
         // 让单个换行(\n)也按换行显示，而非按 CommonMark 默认折叠为空格。
         // remarkCommentBlock 必须排在 commonmark 预设的内置 html 转换器之前
@@ -246,6 +253,30 @@ export class MilkdownAdapter implements EditorAdapter {
     if (proseMirror) {
       (proseMirror as HTMLElement).focus();
     }
+  }
+
+  setSearch(query: string, caseSensitive: boolean, activeIndex: number): number {
+    if (!this.editor || query.length === 0) {
+      this.clearSearch();
+      return 0;
+    }
+
+    let count = 0;
+    this.editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx);
+      const ranges = findProseMirrorMatches(view.state.doc, query, caseSensitive);
+      count = ranges.length;
+      setSearchDecorations(view, ranges, normalizeMatchIndex(activeIndex, count));
+    });
+    return count;
+  }
+
+  clearSearch(): void {
+    if (!this.editor) return;
+    this.editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx);
+      setSearchDecorations(view, [], 0);
+    });
   }
 
   onChange(callback: (markdown: string) => void): void {

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it } from "vitest";
-import { collectTokens } from "./typeset-dom";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { collectTokens, TypesetController } from "./typeset-dom";
 
 const rect = (width: number): DOMRect =>
   ({
@@ -60,5 +60,49 @@ describe("collectTokens", () => {
     ]);
 
     p.remove();
+  });
+});
+
+describe("TypesetController search navigation", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    document.body.replaceChildren();
+  });
+
+  it("scrolls the visible mirror when the active search decoration changes", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe(): void {}
+        disconnect(): void {}
+      },
+    );
+    const scrollIntoView = vi.fn();
+    const originalScrollIntoView = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoView;
+
+    const host = document.createElement("div");
+    host.innerHTML =
+      '<div class="ProseMirror"><div><span class="search-match">needle</span></div></div>';
+    document.body.appendChild(host);
+    const controller = new TypesetController(host);
+
+    try {
+      controller.enable();
+      const realMatch = host.querySelector<HTMLElement>(
+        ".ProseMirror:not(.amark-typeset-mirror) .search-match",
+      )!;
+      realMatch.classList.add("search-match-active");
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(150);
+
+      expect(host.querySelector(".amark-typeset-mirror .search-match-active")).not.toBeNull();
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: "center", inline: "nearest" });
+    } finally {
+      controller.disable();
+      Element.prototype.scrollIntoView = originalScrollIntoView;
+    }
   });
 });

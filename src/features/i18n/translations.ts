@@ -26,6 +26,8 @@ const dictionary = {
   "menu.edit.copy": { zh: "复制", en: "Copy" },
   "menu.edit.paste": { zh: "粘贴", en: "Paste" },
   "menu.edit.selectAll": { zh: "全选", en: "Select All" },
+  "menu.edit.find": { zh: "查找", en: "Find" },
+  "menu.edit.findWorkspace": { zh: "在工作区中搜索", en: "Find in Workspace" },
 
   // View menu
   "menu.view.zoomIn": { zh: "放大", en: "Zoom In" },
@@ -50,6 +52,7 @@ const dictionary = {
   // Sidebar
   "sidebar.workspace": { zh: "工作区", en: "Workspace" },
   "sidebar.outline": { zh: "大纲", en: "Outline" },
+  "sidebar.search": { zh: "搜索", en: "Search" },
   "sidebar.resizer": {
     zh: "拖拽调整侧栏宽度，双击复位",
     en: "Drag to resize sidebar, double-click to reset",
@@ -60,6 +63,26 @@ const dictionary = {
   "outline.navigation": { zh: "当前文档大纲", en: "Current document outline" },
   "outline.noDocument": { zh: "未打开 Markdown 文件", en: "No Markdown file is open" },
   "outline.noHeadings": { zh: "当前文档没有标题", en: "This document has no headings" },
+
+  // Search
+  "search.currentDocument": { zh: "查找当前文档", en: "Find in Current Document" },
+  "search.findPlaceholder": { zh: "查找", en: "Find" },
+  "search.workspacePlaceholder": { zh: "搜索工作区", en: "Search Workspace" },
+  "search.matchCase": { zh: "区分大小写", en: "Match Case" },
+  "search.previous": { zh: "上一个匹配", en: "Previous Match" },
+  "search.next": { zh: "下一个匹配", en: "Next Match" },
+  "search.close": { zh: "关闭查找", en: "Close Find" },
+  "search.noResultsShort": { zh: "无结果", en: "No results" },
+  "search.openWorkspace": { zh: "打开一个文件夹后即可搜索", en: "Open a folder to search" },
+  "search.typeToSearch": {
+    zh: "输入文字以搜索 Markdown 文件",
+    en: "Type to search Markdown files",
+  },
+  "search.searching": { zh: "搜索中…", en: "Searching…" },
+  "search.noResults": { zh: "未找到匹配内容", en: "No matches found" },
+  "search.error": { zh: "搜索失败，请重试", en: "Search failed — please try again" },
+  "search.resultCount": { zh: "{count} 处结果", en: "{count} results" },
+  "search.resultsTruncated": { zh: "已达到显示上限", en: "result limit reached" },
 
   // Editor
   "editor.splitDivider": {

@@ -278,6 +278,8 @@ fn run_menu_action(_app: &AppHandle, _app_state: &AppState, window: &WebviewWind
         | "menu-open-folder-path"
         | "menu-save"
         | "menu-save-as"
+        | "menu-find"
+        | "menu-find-workspace"
         | "menu-export-pdf"
         | "menu-export-html"
         | "menu-import-theme"
@@ -436,6 +438,7 @@ pub fn run() {
             take_launch_files,
             menu_action,
             list_custom_themes,
+            commands::search_commands::search_workspace,
             commands::workspace_commands::open_workspace_folder,
             commands::workspace_commands::scan_workspace,
             commands::workspace_commands::read_file,

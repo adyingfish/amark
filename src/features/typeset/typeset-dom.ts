@@ -114,8 +114,15 @@ export class TypesetController {
     }
     if (pm !== this.observedPm) {
       this.pmObserver.disconnect();
-      // 只看内容变化；attributes 会被 PM 聚焦类等抖动反复触发无谓重建。
-      this.pmObserver.observe(pm, { childList: true, characterData: true, subtree: true });
+      // 搜索切换当前结果时可能只更新装饰 span 的 class，因此也观察 class；
+      // 根节点的聚焦 class 不在 innerHTML 签名中，仍会被下方的签名检查消化。
+      this.pmObserver.observe(pm, {
+        childList: true,
+        characterData: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["class"],
+      });
       this.observedPm = pm;
     }
 
@@ -150,6 +157,12 @@ export class TypesetController {
       el.scrollTop = top;
       el.scrollLeft = left;
     }
+
+    // 仅预览展示的是镜像，ProseMirror 对隐藏真身执行 scrollIntoView 无法
+    // 移动用户看到的视口；镜像完成排版后再滚动可见的当前匹配。
+    mirror
+      .querySelector<HTMLElement>(".search-match-active")
+      ?.scrollIntoView({ block: "center", inline: "nearest" });
   }
 
   private typesetParagraph(p: HTMLElement): void {

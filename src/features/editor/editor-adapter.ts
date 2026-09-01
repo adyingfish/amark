@@ -31,6 +31,12 @@ export interface EditorAdapter {
    */
   focus(): void;
 
+  /** Highlight literal matches in the rendered document and reveal one. */
+  setSearch(query: string, caseSensitive: boolean, activeIndex: number): number;
+
+  /** Remove all rendered-document search highlights. */
+  clearSearch(): void;
+
   /**
    * Toggle whether the rendered view accepts edits. Used to drive the read-only
    * preview (仅预览) while reusing the same rich surface as the editable view.

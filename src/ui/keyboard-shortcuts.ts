@@ -37,6 +37,11 @@ export function setupKeyboardShortcuts(): () => void {
         e.preventDefault();
         runMenuAction(e.shiftKey ? "menu-save-as" : "menu-save");
         break;
+      case "f":
+      case "F":
+        e.preventDefault();
+        runMenuAction(e.shiftKey ? "menu-find-workspace" : "menu-find");
+        break;
       case "=":
       case "+":
         e.preventDefault();

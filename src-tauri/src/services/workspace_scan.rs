@@ -22,7 +22,7 @@ pub(crate) fn simplify_verbatim(path: PathBuf) -> PathBuf {
     path
 }
 
-fn normalize_workspace_root(root_path: &Path) -> PathBuf {
+pub(crate) fn normalize_workspace_root(root_path: &Path) -> PathBuf {
     // `canonicalize` resolves relative paths and symlinks, but it can fail
     // outright on some network filesystems (notably WSL `\\wsl$\…` / 9P shares,
     // which don't support the final-path query it relies on). Treat it as a
@@ -154,12 +154,12 @@ fn scan_directory_recursive(
     Ok(entries)
 }
 
-fn should_skip_entry(name: &str, show_hidden: bool) -> bool {
+pub(crate) fn should_skip_entry(name: &str, show_hidden: bool) -> bool {
     (!show_hidden && name.starts_with('.'))
         || matches!(name, "node_modules" | "target" | "dist" | "build")
 }
 
-fn is_markdown_file(path: &Path) -> bool {
+pub(crate) fn is_markdown_file(path: &Path) -> bool {
     path.extension()
         .and_then(|ext| ext.to_str())
         .map(|ext| {

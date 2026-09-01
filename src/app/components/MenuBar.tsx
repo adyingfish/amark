@@ -108,6 +108,19 @@ export function MenuBar(): ReactElement {
           { kind: "separator" },
           {
             kind: "item",
+            label: t("menu.edit.find"),
+            shortcut: "Ctrl+F",
+            run: () => runMenuAction("menu-find"),
+          },
+          {
+            kind: "item",
+            label: t("menu.edit.findWorkspace"),
+            shortcut: "Ctrl+Shift+F",
+            run: () => runMenuAction("menu-find-workspace"),
+          },
+          { kind: "separator" },
+          {
+            kind: "item",
             label: t("menu.edit.cut"),
             shortcut: "Ctrl+X",
             run: () => document.execCommand("cut"),

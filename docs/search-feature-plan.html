@@ -1,0 +1,1665 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AMark 搜索功能方案</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --paper: #f7f5f0;
+        --surface: #fffefa;
+        --ink: #22221f;
+        --muted: #6e6c65;
+        --line: #d9d5ca;
+        --soft: #eeebe3;
+        --accent: #2864dc;
+        --accent-soft: #e9effc;
+        --success: #2b7650;
+        --warning: #956616;
+        --danger: #a53a32;
+        --shadow: 0 18px 55px rgb(45 41 32 / 10%);
+        --sans:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          "Microsoft YaHei", sans-serif;
+        --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --paper: #181817;
+          --surface: #21211f;
+          --ink: #eeece6;
+          --muted: #a8a59c;
+          --line: #3d3b36;
+          --soft: #2c2b28;
+          --accent: #79a4ff;
+          --accent-soft: #252f45;
+          --success: #72c59a;
+          --warning: #ddb864;
+          --danger: #ee8f86;
+          --shadow: 0 18px 55px rgb(0 0 0 / 28%);
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: var(--sans);
+        line-height: 1.6;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      button {
+        color: inherit;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .shell {
+        width: min(1180px, calc(100% - 36px));
+        margin: 0 auto;
+      }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        border-bottom: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+        background: color-mix(in srgb, var(--paper) 88%, transparent);
+        backdrop-filter: blur(14px);
+      }
+
+      .topbar-inner {
+        min-height: 54px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+      }
+
+      .brand {
+        font-weight: 720;
+        letter-spacing: -0.02em;
+      }
+
+      .nav {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        overflow-x: auto;
+      }
+
+      .nav a,
+      .quiet-button {
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        padding: 7px 10px;
+        color: var(--muted);
+        font-size: 13px;
+        text-decoration: none;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+
+      .nav a:hover,
+      .quiet-button:hover {
+        color: var(--ink);
+        background: var(--soft);
+      }
+
+      header.hero {
+        padding: 84px 0 54px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .eyebrow {
+        margin: 0 0 14px;
+        color: var(--accent);
+        font-size: 13px;
+        font-weight: 760;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        max-width: 820px;
+        margin-bottom: 22px;
+        font-size: clamp(38px, 6vw, 68px);
+        line-height: 1.02;
+        letter-spacing: -0.055em;
+      }
+
+      .lede {
+        max-width: 760px;
+        margin-bottom: 30px;
+        color: var(--muted);
+        font-size: clamp(17px, 2vw, 21px);
+      }
+
+      .meta-line {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 22px;
+        font-family: var(--mono);
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .decision-strip {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .decision {
+        min-height: 128px;
+        padding: 24px;
+        border-right: 1px solid var(--line);
+      }
+
+      .decision:last-child {
+        border-right: 0;
+      }
+
+      .decision small {
+        display: block;
+        margin-bottom: 7px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .decision strong {
+        display: block;
+        font-size: 16px;
+        line-height: 1.35;
+      }
+
+      section {
+        padding: 72px 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .section-heading {
+        display: grid;
+        grid-template-columns: 0.34fr 0.66fr;
+        gap: 38px;
+        align-items: start;
+        margin-bottom: 34px;
+      }
+
+      h2 {
+        margin-bottom: 0;
+        font-size: clamp(28px, 4vw, 42px);
+        line-height: 1.08;
+        letter-spacing: -0.035em;
+      }
+
+      .section-heading p {
+        max-width: 690px;
+        margin-bottom: 0;
+        color: var(--muted);
+        font-size: 16px;
+      }
+
+      .prototype-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 12px;
+      }
+
+      .segmented {
+        display: inline-flex;
+        padding: 3px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--soft);
+      }
+
+      .segmented button {
+        border: 0;
+        border-radius: 5px;
+        padding: 7px 12px;
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+        font-size: 13px;
+      }
+
+      .segmented button.active {
+        background: var(--surface);
+        color: var(--ink);
+        box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
+      }
+
+      .prototype-note {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .app-window {
+        overflow: hidden;
+        min-height: 610px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+      }
+
+      .app-titlebar {
+        height: 45px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 0 14px;
+        border-bottom: 1px solid var(--line);
+        font-size: 12px;
+      }
+
+      .app-titlebar strong {
+        margin-right: 2px;
+        font-size: 13px;
+      }
+
+      .app-menu {
+        color: var(--muted);
+      }
+
+      .title-actions {
+        display: flex;
+        gap: 6px;
+        margin-left: auto;
+      }
+
+      .title-actions span {
+        width: 26px;
+        height: 22px;
+        display: grid;
+        place-items: center;
+        border-radius: 4px;
+        color: var(--muted);
+      }
+
+      .app-body {
+        min-height: 565px;
+        display: grid;
+        grid-template-columns: 320px 1fr;
+      }
+
+      .mock-sidebar {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        border-right: 1px solid var(--line);
+        background: color-mix(in srgb, var(--surface) 76%, var(--soft));
+      }
+
+      .sidebar-tabs {
+        height: 41px;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .sidebar-tab {
+        position: relative;
+        display: grid;
+        place-items: center;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .sidebar-tab.active {
+        color: var(--ink);
+      }
+
+      .sidebar-tab.active::after {
+        content: "";
+        position: absolute;
+        inset: auto 9px -1px;
+        height: 2px;
+        background: var(--accent);
+      }
+
+      .search-form {
+        padding: 12px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .search-input-wrap {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 34px;
+        padding: 0 9px;
+        border: 1px solid var(--accent);
+        border-radius: 6px;
+        background: var(--surface);
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent);
+      }
+
+      .search-input-wrap input {
+        width: 100%;
+        min-width: 0;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: var(--ink);
+        font-size: 13px;
+      }
+
+      .search-icon {
+        color: var(--muted);
+      }
+
+      .search-options {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .option-key {
+        padding: 1px 5px;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        font-family: var(--mono);
+      }
+
+      .result-summary {
+        padding: 11px 12px 7px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .result-list {
+        overflow: auto;
+        padding-bottom: 12px;
+      }
+
+      .result-group {
+        border-top: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
+      }
+
+      .result-file {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 9px 12px 5px;
+        font-size: 12px;
+        font-weight: 720;
+      }
+
+      .result-path,
+      .result-count {
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 500;
+      }
+
+      .result-item {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 29px 1fr;
+        gap: 7px;
+        padding: 6px 12px;
+        border: 0;
+        background: transparent;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .result-item:hover,
+      .result-item.active {
+        background: var(--accent-soft);
+      }
+
+      .line-number {
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 10px;
+        text-align: right;
+      }
+
+      .result-context {
+        overflow: hidden;
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 10px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      mark {
+        border-radius: 2px;
+        background: #f1ca58;
+        color: #292515;
+        padding: 0 1px;
+      }
+
+      .editor-pane {
+        position: relative;
+        min-width: 0;
+        background: var(--surface);
+      }
+
+      .tabbar {
+        height: 36px;
+        display: flex;
+        align-items: end;
+        padding-left: 8px;
+        border-bottom: 1px solid var(--line);
+        background: color-mix(in srgb, var(--surface) 80%, var(--soft));
+      }
+
+      .doc-tab {
+        height: 31px;
+        padding: 7px 14px;
+        border: 1px solid var(--line);
+        border-bottom-color: var(--surface);
+        border-radius: 5px 5px 0 0;
+        background: var(--surface);
+        font-size: 11px;
+      }
+
+      .findbar {
+        position: absolute;
+        z-index: 4;
+        top: 48px;
+        right: 14px;
+        display: none;
+        align-items: center;
+        gap: 6px;
+        width: min(430px, calc(100% - 28px));
+        min-height: 40px;
+        padding: 5px 7px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: var(--surface);
+        box-shadow: 0 10px 30px rgb(0 0 0 / 15%);
+      }
+
+      .findbar.visible {
+        display: flex;
+      }
+
+      .findbar input {
+        min-width: 80px;
+        flex: 1;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: var(--ink);
+        font-size: 12px;
+      }
+
+      .find-count {
+        flex-shrink: 0;
+        color: var(--muted);
+        font-size: 10px;
+      }
+
+      .find-action {
+        width: 25px;
+        height: 25px;
+        padding: 0;
+        border: 0;
+        border-radius: 4px;
+        background: transparent;
+        cursor: pointer;
+      }
+
+      .find-action:hover {
+        background: var(--soft);
+      }
+
+      .document {
+        max-width: 650px;
+        margin: 0 auto;
+        padding: 58px 48px 80px;
+      }
+
+      .document h3 {
+        margin-bottom: 22px;
+        font-size: 28px;
+        letter-spacing: -0.025em;
+      }
+
+      .document p {
+        color: color-mix(in srgb, var(--ink) 85%, var(--muted));
+        font-family: Georgia, "Noto Serif SC", serif;
+        font-size: 14px;
+        line-height: 1.9;
+      }
+
+      .document .active-line {
+        margin-inline: -10px;
+        padding-inline: 10px;
+        border-left: 2px solid var(--accent);
+        background: var(--accent-soft);
+      }
+
+      .flow-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 300px;
+        gap: 18px;
+      }
+
+      .flow-card,
+      .detail-panel {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--surface);
+      }
+
+      .flow-card {
+        min-height: 390px;
+        padding: 20px;
+      }
+
+      .flow-card svg {
+        width: 100%;
+        height: auto;
+        color: var(--muted);
+      }
+
+      .flow-node {
+        cursor: pointer;
+      }
+
+      .flow-node rect {
+        fill: var(--surface);
+        stroke: currentColor;
+        transition: 0.15s ease;
+      }
+
+      .flow-node text {
+        fill: var(--ink);
+        font-family: var(--sans);
+        font-size: 13px;
+        pointer-events: none;
+      }
+
+      .flow-node:hover rect,
+      .flow-node.active rect {
+        stroke: var(--accent);
+        stroke-width: 2;
+        fill: var(--accent-soft);
+      }
+
+      .flow-arrow {
+        stroke: currentColor;
+        stroke-width: 1.5;
+      }
+
+      .flow-arrow.hot {
+        stroke: var(--accent);
+        stroke-width: 2;
+      }
+
+      .detail-panel {
+        padding: 24px;
+      }
+
+      .detail-panel small {
+        color: var(--accent);
+        font-weight: 750;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .detail-panel h3 {
+        margin: 9px 0 12px;
+        font-size: 21px;
+      }
+
+      .detail-panel p {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .detail-panel code,
+      code {
+        font-family: var(--mono);
+        font-size: 0.88em;
+      }
+
+      .detail-panel ul {
+        margin: 18px 0 0;
+        padding-left: 18px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .timeline {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        counter-reset: milestone;
+      }
+
+      .milestone {
+        position: relative;
+        padding: 44px 24px 18px 0;
+        border-top: 2px solid var(--line);
+        counter-increment: milestone;
+      }
+
+      .milestone::before {
+        content: counter(milestone);
+        position: absolute;
+        top: -16px;
+        left: 0;
+        width: 30px;
+        height: 30px;
+        display: grid;
+        place-items: center;
+        border: 2px solid var(--accent);
+        border-radius: 50%;
+        background: var(--paper);
+        color: var(--accent);
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 750;
+      }
+
+      .milestone h3 {
+        margin-bottom: 8px;
+        font-size: 16px;
+      }
+
+      .milestone p {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .milestone .verify {
+        color: var(--success);
+        font-family: var(--mono);
+        font-size: 11px;
+      }
+
+      .file-map {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--line);
+      }
+
+      .file-column {
+        padding: 22px;
+        background: var(--surface);
+      }
+
+      .file-column h3 {
+        margin-bottom: 14px;
+        color: var(--muted);
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .file-column ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .file-column li + li {
+        margin-top: 13px;
+      }
+
+      .file-column code {
+        display: block;
+        overflow-wrap: anywhere;
+        color: var(--ink);
+        font-size: 11px;
+      }
+
+      .file-column span {
+        display: block;
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        border-top: 1px solid var(--line);
+        font-size: 14px;
+      }
+
+      th,
+      td {
+        padding: 15px 12px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .risk-low {
+        color: var(--success);
+      }
+
+      .risk-mid {
+        color: var(--warning);
+      }
+
+      .scope-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 28px;
+      }
+
+      .scope-block {
+        border-top: 3px solid var(--success);
+        padding-top: 17px;
+      }
+
+      .scope-block.out {
+        border-top-color: var(--muted);
+      }
+
+      .scope-block h3 {
+        margin-bottom: 12px;
+      }
+
+      .scope-block ul {
+        margin: 0;
+        padding-left: 20px;
+        color: var(--muted);
+      }
+
+      .acceptance {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px 28px;
+      }
+
+      .check {
+        position: relative;
+        padding: 15px 0 15px 30px;
+        border-bottom: 1px solid var(--line);
+        font-size: 14px;
+      }
+
+      .check::before {
+        content: "✓";
+        position: absolute;
+        left: 0;
+        color: var(--success);
+        font-weight: 800;
+      }
+
+      footer {
+        padding: 54px 0 80px;
+      }
+
+      .handoff {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+      }
+
+      .handoff p {
+        margin-bottom: 0;
+        color: var(--muted);
+      }
+
+      .primary-button {
+        flex-shrink: 0;
+        border: 0;
+        border-radius: 7px;
+        padding: 10px 15px;
+        background: var(--accent);
+        color: white;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .primary-button:hover {
+        filter: brightness(1.06);
+      }
+
+      .toast {
+        position: fixed;
+        right: 22px;
+        bottom: 22px;
+        z-index: 50;
+        transform: translateY(12px);
+        opacity: 0;
+        padding: 10px 14px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        color: var(--ink);
+        font-size: 13px;
+        transition: 0.18s ease;
+        pointer-events: none;
+      }
+
+      .toast.visible {
+        transform: translateY(0);
+        opacity: 1;
+      }
+
+      @media (max-width: 860px) {
+        .decision-strip,
+        .timeline,
+        .file-map {
+          grid-template-columns: repeat(2, 1fr);
+        }
+
+        .decision:nth-child(2) {
+          border-right: 0;
+        }
+
+        .decision:nth-child(-n + 2) {
+          border-bottom: 1px solid var(--line);
+        }
+
+        .section-heading,
+        .flow-layout {
+          grid-template-columns: 1fr;
+        }
+
+        .app-body {
+          grid-template-columns: 260px 1fr;
+        }
+      }
+
+      @media (max-width: 650px) {
+        .shell {
+          width: min(100% - 24px, 1180px);
+        }
+
+        .nav a {
+          display: none;
+        }
+
+        header.hero {
+          padding-top: 54px;
+        }
+
+        .decision-strip,
+        .timeline,
+        .file-map,
+        .scope-grid,
+        .acceptance {
+          grid-template-columns: 1fr;
+        }
+
+        .decision,
+        .decision:nth-child(2) {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+
+        .decision:last-child {
+          border-bottom: 0;
+        }
+
+        .prototype-toolbar,
+        .handoff {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .app-window {
+          min-height: auto;
+        }
+
+        .app-body {
+          grid-template-columns: 1fr;
+        }
+
+        .mock-sidebar {
+          min-height: 500px;
+          border-right: 0;
+        }
+
+        .editor-pane {
+          min-height: 480px;
+          border-top: 1px solid var(--line);
+        }
+
+        .document {
+          padding-inline: 26px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="topbar">
+      <div class="shell topbar-inner">
+        <div class="brand">AMark · 搜索方案</div>
+        <nav class="nav" aria-label="方案目录">
+          <a href="#prototype">交互原型</a>
+          <a href="#architecture">数据流</a>
+          <a href="#delivery">开发计划</a>
+          <a href="#risks">风险</a>
+          <button class="quiet-button" id="copy-summary" type="button">复制摘要</button>
+        </nav>
+      </div>
+    </div>
+
+    <main>
+      <header class="hero shell">
+        <p class="eyebrow">Implementation proposal · 已确认并实现</p>
+        <h1>两种查找场景，一套连续的阅读体验</h1>
+        <p class="lede">
+          当前文档查找留在编辑区，工作区搜索进入侧栏。默认只做快速、可靠的纯文本搜索，覆盖未保存内容，并把每个结果准确带回原文位置。
+        </p>
+        <div class="meta-line">
+          <span>分支 codex/search-feature</span>
+          <span>基线 main@80d15a3</span>
+          <span>文档 2026-08-27</span>
+        </div>
+      </header>
+
+      <div class="shell decision-strip" aria-label="核心决策">
+        <div class="decision">
+          <small>当前文档</small>
+          <strong>Ctrl/Cmd + F<br />编辑区浮层查找</strong>
+        </div>
+        <div class="decision">
+          <small>整个工作区</small>
+          <strong>Ctrl/Cmd + Shift + F<br />侧栏搜索页签</strong>
+        </div>
+        <div class="decision">
+          <small>搜索引擎</small>
+          <strong>Rust 后台扫描<br />150 ms 防抖</strong>
+        </div>
+        <div class="decision">
+          <small>首版边界</small>
+          <strong>Markdown 纯文本<br />大小写可选</strong>
+        </div>
+      </div>
+
+      <section id="prototype">
+        <div class="shell">
+          <div class="section-heading">
+            <h2>交互原型</h2>
+            <p>
+              这里沿用 AMark 现有的工作区 /
+              大纲侧栏、标签页和主题变量。切换下面的场景，可分别查看工作区搜索与当前文档查找；点击搜索结果会模拟定位原文。
+            </p>
+          </div>
+
+          <div class="prototype-toolbar">
+            <div class="segmented" aria-label="原型场景">
+              <button type="button" class="active" data-mode="workspace">工作区搜索</button>
+              <button type="button" data-mode="current">当前文档查找</button>
+            </div>
+            <span class="prototype-note">可操作原型 · 非最终视觉稿</span>
+          </div>
+
+          <div class="app-window">
+            <div class="app-titlebar">
+              <strong>AMark</strong>
+              <span class="app-menu">文件</span>
+              <span class="app-menu">编辑</span>
+              <span class="app-menu">视图</span>
+              <span class="app-menu">主题</span>
+              <div class="title-actions" aria-hidden="true">
+                <span>—</span><span>□</span><span>×</span>
+              </div>
+            </div>
+            <div class="app-body">
+              <aside class="mock-sidebar">
+                <div class="sidebar-tabs">
+                  <div class="sidebar-tab">工作区</div>
+                  <div class="sidebar-tab">大纲</div>
+                  <div class="sidebar-tab active">搜索</div>
+                </div>
+                <div class="search-form">
+                  <div class="search-input-wrap">
+                    <span class="search-icon">⌕</span>
+                    <input id="workspace-query" value="Agent" aria-label="搜索工作区" />
+                    <span class="option-key" title="区分大小写">Aa</span>
+                  </div>
+                  <div class="search-options">
+                    <span>仅搜索 Markdown</span><span>·</span><span>包含未保存内容</span>
+                  </div>
+                </div>
+                <div class="result-summary">3 个文件中有 7 处结果</div>
+                <div class="result-list">
+                  <div class="result-group">
+                    <div class="result-file">
+                      <span>README.md <span class="result-path">/</span></span
+                      ><span class="result-count">3</span>
+                    </div>
+                    <button class="result-item active" type="button" data-line="intro">
+                      <span class="line-number">16</span
+                      ><span class="result-context">AI <mark>Agent</mark> 的产出，值得...</span>
+                    </button>
+                    <button class="result-item" type="button" data-line="watch">
+                      <span class="line-number">34</span
+                      ><span class="result-context"><mark>Agent</mark> 写入状态提示</span>
+                    </button>
+                    <button class="result-item" type="button" data-line="principle">
+                      <span class="line-number">83</span
+                      ><span class="result-context">AI <mark>Agent</mark> Native</span>
+                    </button>
+                  </div>
+                  <div class="result-group">
+                    <div class="result-file">
+                      <span>CLAUDE.md <span class="result-path">/</span></span
+                      ><span class="result-count">2</span>
+                    </div>
+                    <button class="result-item" type="button" data-line="generic">
+                      <span class="line-number">4</span
+                      ><span class="result-context"><mark>Agent</mark> coding mistakes</span>
+                    </button>
+                    <button class="result-item" type="button" data-line="generic">
+                      <span class="line-number">38</span
+                      ><span class="result-context">senior <mark>Agent</mark> review</span>
+                    </button>
+                  </div>
+                  <div class="result-group">
+                    <div class="result-file">
+                      <span>docs/vision.md</span><span class="result-count">2</span>
+                    </div>
+                    <button class="result-item" type="button" data-line="generic">
+                      <span class="line-number">12</span
+                      ><span class="result-context"><mark>Agent</mark> 原生阅读器</span>
+                    </button>
+                  </div>
+                </div>
+              </aside>
+
+              <div class="editor-pane">
+                <div class="tabbar"><span class="doc-tab">README.md</span></div>
+                <div class="findbar" id="findbar">
+                  <span class="search-icon">⌕</span>
+                  <input value="Agent" aria-label="查找当前文档" />
+                  <span class="find-count">1 / 3</span>
+                  <button class="find-action" type="button" title="上一个">↑</button>
+                  <button class="find-action" type="button" title="下一个">↓</button>
+                  <button class="find-action" id="close-findbar" type="button" title="关闭">
+                    ×
+                  </button>
+                </div>
+                <article class="document">
+                  <h3>AI Agent 产物的第一位读者</h3>
+                  <p id="intro" class="active-line">
+                    写作正在交给 <mark>Agent</mark>，阅读依然属于你。
+                  </p>
+                  <p>
+                    LLM wiki、本地知识库、迭代中的
+                    PRD……它们通常有层级、有交叉引用，也会被一轮又一轮地修改。
+                  </p>
+                  <p id="watch">
+                    AMark 把整个目录以所见即所得的方式渲染，并通过 <mark>Agent</mark>
+                    写入状态提示与最近变更面板，让阅读过程保持连续。
+                  </p>
+                  <p id="principle">
+                    设计原则是保持 AI <mark>Agent</mark> Native，同时坚持本地优先、轻量和开放格式。
+                  </p>
+                  <p id="generic">
+                    搜索结果应当直接回到上下文，而不是让读者重新在长文中寻找刚才看到的那句话。
+                  </p>
+                </article>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="architecture">
+        <div class="shell">
+          <div class="section-heading">
+            <h2>数据流与职责</h2>
+            <p>
+              当前文档搜索直接读内存中的活动文档；工作区搜索把查询交给 Rust
+              后端扫描文件，同时传入已打开且未保存的内容作为覆盖值。这样既不阻塞界面，也不会漏掉刚输入但尚未保存的文字。
+            </p>
+          </div>
+          <div class="flow-layout">
+            <figure class="flow-card">
+              <svg viewBox="0 0 760 350" role="img" aria-labelledby="flow-title">
+                <title id="flow-title">AMark 搜索数据流</title>
+                <defs>
+                  <marker
+                    id="arrow"
+                    viewBox="0 0 10 10"
+                    refX="8"
+                    refY="5"
+                    markerWidth="6"
+                    markerHeight="6"
+                    orient="auto-start-reverse"
+                  >
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"></path>
+                  </marker>
+                  <marker
+                    id="hot-arrow"
+                    viewBox="0 0 10 10"
+                    refX="8"
+                    refY="5"
+                    markerWidth="6"
+                    markerHeight="6"
+                    orient="auto-start-reverse"
+                  >
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)"></path>
+                  </marker>
+                </defs>
+
+                <line
+                  class="flow-arrow hot"
+                  x1="180"
+                  y1="82"
+                  x2="285"
+                  y2="82"
+                  marker-end="url(#hot-arrow)"
+                ></line>
+                <line
+                  class="flow-arrow hot"
+                  x1="465"
+                  y1="82"
+                  x2="570"
+                  y2="82"
+                  marker-end="url(#hot-arrow)"
+                ></line>
+                <line
+                  class="flow-arrow"
+                  x1="375"
+                  y1="112"
+                  x2="375"
+                  y2="194"
+                  marker-end="url(#arrow)"
+                ></line>
+                <line
+                  class="flow-arrow"
+                  x1="285"
+                  y1="224"
+                  x2="180"
+                  y2="224"
+                  marker-end="url(#arrow)"
+                ></line>
+                <line
+                  class="flow-arrow"
+                  x1="465"
+                  y1="224"
+                  x2="570"
+                  y2="224"
+                  marker-end="url(#arrow)"
+                ></line>
+                <line
+                  class="flow-arrow hot"
+                  x1="660"
+                  y1="254"
+                  x2="660"
+                  y2="305"
+                  marker-end="url(#hot-arrow)"
+                ></line>
+                <line
+                  class="flow-arrow hot"
+                  x1="90"
+                  y1="254"
+                  x2="90"
+                  y2="305"
+                  marker-end="url(#hot-arrow)"
+                ></line>
+
+                <g class="flow-node active" data-node="shortcut" tabindex="0">
+                  <rect x="20" y="52" width="160" height="60" rx="8"></rect>
+                  <text x="100" y="78" text-anchor="middle">快捷键 / 菜单</text>
+                  <text
+                    x="100"
+                    y="97"
+                    text-anchor="middle"
+                    style="fill: var(--muted); font-size: 11px"
+                  >
+                    Ctrl+F · Ctrl+Shift+F
+                  </text>
+                </g>
+                <g class="flow-node" data-node="ui" tabindex="0">
+                  <rect x="285" y="52" width="180" height="60" rx="8"></rect>
+                  <text x="375" y="78" text-anchor="middle">React 搜索界面</text>
+                  <text
+                    x="375"
+                    y="97"
+                    text-anchor="middle"
+                    style="fill: var(--muted); font-size: 11px"
+                  >
+                    查询、状态、结果导航
+                  </text>
+                </g>
+                <g class="flow-node" data-node="store" tabindex="0">
+                  <rect x="570" y="52" width="170" height="60" rx="8"></rect>
+                  <text x="655" y="78" text-anchor="middle">documentStore</text>
+                  <text
+                    x="655"
+                    y="97"
+                    text-anchor="middle"
+                    style="fill: var(--muted); font-size: 11px"
+                  >
+                    未保存内容覆盖
+                  </text>
+                </g>
+                <g class="flow-node" data-node="controller" tabindex="0">
+                  <rect x="285" y="194" width="180" height="60" rx="8"></rect>
+                  <text x="375" y="220" text-anchor="middle">search-controller</text>
+                  <text
+                    x="375"
+                    y="239"
+                    text-anchor="middle"
+                    style="fill: var(--muted); font-size: 11px"
+                  >
+                    防抖、取消过期响应
+                  </text>
+                </g>
+                <g class="flow-node" data-node="current" tabindex="0">
+                  <rect x="20" y="194" width="160" height="60" rx="8"></rect>
+                  <text x="100" y="220" text-anchor="middle">当前文档引擎</text>
+                  <text
+                    x="100"
+                    y="239"
+                    text-anchor="middle"
+                    style="fill: var(--muted); font-size: 11px"
+                  >
+                    活动编辑面查找
+                  </text>
+                </g>
+                <g class="flow-node" data-node="rust" tabindex="0">
+                  <rect x="570" y="194" width="170" height="60" rx="8"></rect>
+                  <text x="655" y="220" text-anchor="middle">Rust 搜索命令</text>
+                  <text
+                    x="655"
+                    y="239"
+                    text-anchor="middle"
+                    style="fill: var(--muted); font-size: 11px"
+                  >
+                    后台扫描 Markdown
+                  </text>
+                </g>
+                <g class="flow-node" data-node="reveal" tabindex="0">
+                  <rect x="20" y="305" width="160" height="40" rx="8"></rect>
+                  <text x="100" y="330" text-anchor="middle">高亮并定位</text>
+                </g>
+                <g class="flow-node" data-node="result" tabindex="0">
+                  <rect x="570" y="305" width="170" height="40" rx="8"></rect>
+                  <text x="655" y="330" text-anchor="middle">分组结果 + 上下文</text>
+                </g>
+              </svg>
+            </figure>
+            <aside class="detail-panel" aria-live="polite">
+              <small id="detail-kind">入口</small>
+              <h3 id="detail-title">快捷键与菜单共用动作</h3>
+              <p id="detail-text">
+                在现有 <code>menu_action</code> 分发链中新增两个动作，避免菜单与键盘各维护一套行为。
+              </p>
+              <ul id="detail-list">
+                <li>Ctrl/Cmd+F：当前文档</li>
+                <li>Ctrl/Cmd+Shift+F：工作区</li>
+                <li>Escape：关闭或清空焦点</li>
+              </ul>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <section id="delivery">
+        <div class="shell">
+          <div class="section-heading">
+            <h2>四段式交付</h2>
+            <p>
+              先固定纯函数和后端结果协议，再接 UI
+              与编辑器定位，最后做跨视图回归。每一段都有可独立验证的完成条件，避免把问题堆到集成阶段。
+            </p>
+          </div>
+
+          <div class="timeline">
+            <article class="milestone">
+              <h3>搜索核心</h3>
+              <p>定义结果结构、行列与上下文生成；后端只扫描 Markdown，复用隐藏目录规则。</p>
+              <div class="verify">验证：Rust 单元测试</div>
+            </article>
+            <article class="milestone">
+              <h3>当前文档</h3>
+              <p>实现查找条、上一个 / 下一个、循环导航、大小写选项，并覆盖四种视图模式。</p>
+              <div class="verify">验证：适配器集成测试</div>
+            </article>
+            <article class="milestone">
+              <h3>工作区侧栏</h3>
+              <p>加入第三个侧栏页签、结果分组、未保存内容覆盖、过期请求丢弃与精确跳转。</p>
+              <div class="verify">验证：控制器与交互测试</div>
+            </article>
+            <article class="milestone">
+              <h3>收口与回归</h3>
+              <p>补齐中英文文案、菜单和快捷键，检查大工作区、空状态、主题与窗口缩放。</p>
+              <div class="verify">验证：vp check · vp test</div>
+            </article>
+          </div>
+
+          <div class="file-map" style="margin-top: 42px">
+            <div class="file-column">
+              <h3>新增 · 搜索域</h3>
+              <ul>
+                <li>
+                  <code>src/features/search/search-types.ts</code
+                  ><span>请求、结果与活动匹配类型</span>
+                </li>
+                <li>
+                  <code>src/features/search/search-controller.ts</code
+                  ><span>当前文档查找与工作区请求编排</span>
+                </li>
+                <li><code>src/app/components/SearchPanel.tsx</code><span>工作区结果列表</span></li>
+                <li>
+                  <code>src/app/components/DocumentFindBar.tsx</code><span>当前文档查找条</span>
+                </li>
+              </ul>
+            </div>
+            <div class="file-column">
+              <h3>新增 · Rust 后端</h3>
+              <ul>
+                <li>
+                  <code>src-tauri/src/services/workspace_search.rs</code
+                  ><span>递归扫描、上下文截取、结果上限</span>
+                </li>
+                <li>
+                  <code>src-tauri/src/models/search_models.rs</code
+                  ><span>序列化请求与结果结构</span>
+                </li>
+                <li>
+                  <code>src-tauri/src/commands/search_commands.rs</code
+                  ><span>Tauri 异步命令入口</span>
+                </li>
+              </ul>
+            </div>
+            <div class="file-column">
+              <h3>修改 · 现有接缝</h3>
+              <ul>
+                <li><code>src/app/App.tsx</code><span>侧栏状态、查找条和结果跳转</span></li>
+                <li><code>src/features/editor/*adapter.ts</code><span>富文本搜索高亮接口</span></li>
+                <li><code>src/ui/keyboard-shortcuts.ts</code><span>两组快捷键</span></li>
+                <li><code>src/features/i18n/translations.ts</code><span>中英文搜索文案</span></li>
+                <li><code>src/themes/workspace.css</code><span>沿用主题变量的搜索样式</span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="risks">
+        <div class="shell">
+          <div class="section-heading">
+            <h2>风险与约束</h2>
+            <p>
+              最需要提前处理的不是“能否找到字符串”，而是富文本视图中的位置映射、未保存内容的一致性，以及连续输入时旧请求覆盖新结果。
+            </p>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>风险</th>
+                <th>等级</th>
+                <th>处理方式</th>
+                <th>验证</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Markdown 源码位置与富文本位置不同</td>
+                <td class="risk-mid">中</td>
+                <td>
+                  当前文档按活动编辑面搜索；工作区结果在富文本中按可见文本定位，遇到仅存在于语法标记中的匹配则回退到源码视图精确定位。
+                </td>
+                <td>粗体、链接、代码块、公式样例</td>
+              </tr>
+              <tr>
+                <td>未保存内容与磁盘结果冲突</td>
+                <td class="risk-mid">中</td>
+                <td>
+                  前端只发送脏文档覆盖值；后端对同一路径优先使用覆盖内容，并校验路径仍在工作区内。
+                </td>
+                <td>修改未保存、保存后、外部更新</td>
+              </tr>
+              <tr>
+                <td>快速输入导致结果闪回</td>
+                <td class="risk-low">低</td>
+                <td>150 ms 防抖；每次请求携带递增序号，只接收最后一次请求结果。</td>
+                <td>模拟慢响应与连续键入</td>
+              </tr>
+              <tr>
+                <td>大型目录扫描卡顿</td>
+                <td class="risk-low">低</td>
+                <td>
+                  <code>spawn_blocking</code> 后台执行，复用现有目录排除规则，并限制每文件 50
+                  条、总计 500 条结果。
+                </td>
+                <td>构造千文件工作区基准</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <div class="shell">
+          <div class="section-heading">
+            <h2>范围边界</h2>
+            <p>
+              首版目标是把最常用的查找闭环做扎实。高级查询能力留到真实使用反馈出现后再决定，不在本次开发中预埋复杂抽象。
+            </p>
+          </div>
+          <div class="scope-grid">
+            <div class="scope-block">
+              <h3>本次包含</h3>
+              <ul>
+                <li>当前文档与整个工作区两种范围</li>
+                <li>纯文本、默认不区分大小写、可切换大小写</li>
+                <li>上一个 / 下一个、循环导航、结果计数</li>
+                <li>工作区按文件分组、显示行号与上下文</li>
+                <li>未保存文档、隐藏目录偏好、中英文界面</li>
+              </ul>
+            </div>
+            <div class="scope-block out">
+              <h3>本次明确不做</h3>
+              <ul>
+                <li>正则表达式、模糊搜索与拼音搜索</li>
+                <li>替换、批量替换与搜索历史</li>
+                <li>非 Markdown 文件与附件内容索引</li>
+                <li>持久化倒排索引或后台常驻索引服务</li>
+                <li>跨工作区与语义搜索</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="shell">
+          <div class="section-heading">
+            <h2>完成判定</h2>
+            <p>下面这些行为全部通过，才视为功能完成；“界面能搜出示例文字”不等同于交付。</p>
+          </div>
+          <div class="acceptance">
+            <div class="check">四种编辑视图中，Ctrl/Cmd+F 都能打开查找并定位当前匹配。</div>
+            <div class="check">Ctrl/Cmd+Shift+F 会展开侧栏并聚焦工作区搜索输入框。</div>
+            <div class="check">查询为空、无工作区、无结果、达到结果上限时均有明确状态。</div>
+            <div class="check">点击工作区结果会打开正确文件，并定位到对应匹配。</div>
+            <div class="check">未保存内容可被搜索，且不会同时出现磁盘旧内容的重复结果。</div>
+            <div class="check">连续键入时不会显示旧查询的迟到结果。</div>
+            <div class="check">隐藏目录行为与“显示隐藏文件夹”偏好一致，生成目录始终排除。</div>
+            <div class="check"><code>vp check</code> 与 <code>vp test</code> 全部通过。</div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="shell handoff">
+        <div>
+          <p class="eyebrow">Recommended next step</p>
+          <h2>确认方案后，从搜索核心与测试开始实现</h2>
+          <p>方案对应功能已在当前分支实现，并通过前端与 Rust 测试。</p>
+        </div>
+        <button class="primary-button" id="copy-handoff" type="button">复制开发交接摘要</button>
+      </div>
+    </footer>
+
+    <div class="toast" id="toast" role="status">已复制</div>
+
+    <script>
+      const modeButtons = document.querySelectorAll("[data-mode]");
+      const sidebar = document.querySelector(".mock-sidebar");
+      const findbar = document.getElementById("findbar");
+      const resultItems = document.querySelectorAll(".result-item");
+      const documentLines = document.querySelectorAll(".document p");
+
+      function setMode(mode) {
+        modeButtons.forEach((button) =>
+          button.classList.toggle("active", button.dataset.mode === mode),
+        );
+        const current = mode === "current";
+        sidebar.style.opacity = current ? "0.5" : "1";
+        findbar.classList.toggle("visible", current);
+        if (current) findbar.querySelector("input").focus();
+      }
+
+      modeButtons.forEach((button) =>
+        button.addEventListener("click", () => setMode(button.dataset.mode)),
+      );
+      document
+        .getElementById("close-findbar")
+        .addEventListener("click", () => setMode("workspace"));
+
+      resultItems.forEach((button) => {
+        button.addEventListener("click", () => {
+          resultItems.forEach((item) => item.classList.remove("active"));
+          documentLines.forEach((line) => line.classList.remove("active-line"));
+          button.classList.add("active");
+          const target = document.getElementById(button.dataset.line);
+          if (target) {
+            target.classList.add("active-line");
+            target.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        });
+      });
+
+      const details = {
+        shortcut: [
+          "入口",
+          "快捷键与菜单共用动作",
+          "在现有 menu_action 分发链中新增两个动作，避免菜单与键盘各维护一套行为。",
+          ["Ctrl/Cmd+F：当前文档", "Ctrl/Cmd+Shift+F：工作区", "Escape：关闭或清空焦点"],
+        ],
+        ui: [
+          "界面",
+          "搜索状态只在 React 层",
+          "组件只接收查询、加载状态与结果，不直接读文件系统，便于测试空状态和键盘导航。",
+          ["DocumentFindBar", "SearchPanel", "App 负责打开文件与切换侧栏"],
+        ],
+        store: [
+          "一致性",
+          "未保存内容覆盖磁盘",
+          "只收集已打开且处于脏状态的 Markdown 文档，作为路径到内容的覆盖映射交给后端。",
+          ["未命名文件仅参与当前文档查找", "删除或工作区外路径不发送", "后端再次校验路径边界"],
+        ],
+        controller: [
+          "编排",
+          "避免无效与过期工作",
+          "控制器负责输入防抖、请求序号和结果上限；组件保持无副作用。",
+          ["空查询不发请求", "150 ms 防抖", "仅最后响应可更新界面"],
+        ],
+        current: [
+          "当前文档",
+          "按活动编辑面搜索",
+          "源码视图直接使用字符偏移；富文本视图由编辑器适配器维护 ProseMirror 高亮与选择。",
+          ["上一个 / 下一个循环", "大小写切换", "关闭时清理所有高亮"],
+        ],
+        rust: [
+          "后端",
+          "后台扫描 Markdown 文件",
+          "复用现有扩展名与目录排除规则，在阻塞线程池中完成文件读取和匹配。",
+          ["每文件最多 50 条", "总计最多 500 条", "返回行、列和上下文"],
+        ],
+        reveal: [
+          "定位",
+          "精确回到匹配上下文",
+          "源码与分屏可按原始偏移精确选择；富文本先按可见文字定位，仅语法字符命中时回退源码。",
+          ["打开或激活标签页", "滚动到可见区域", "当前项使用主题强调色"],
+        ],
+        result: [
+          "输出",
+          "稳定、可导航的结果模型",
+          "结果按文件顺序和行号排序，附带查询截断标识，支持侧栏分组与无障碍朗读。",
+          ["filePath / line / column", "preview / match range", "truncated / totalMatches"],
+        ],
+      };
+
+      const flowNodes = document.querySelectorAll(".flow-node");
+      function showNode(node) {
+        flowNodes.forEach((item) => item.classList.toggle("active", item === node));
+        const [kind, title, text, items] = details[node.dataset.node];
+        document.getElementById("detail-kind").textContent = kind;
+        document.getElementById("detail-title").textContent = title;
+        document.getElementById("detail-text").textContent = text;
+        document.getElementById("detail-list").innerHTML = items
+          .map((item) => `<li>${item}</li>`)
+          .join("");
+      }
+      flowNodes.forEach((node) => {
+        node.addEventListener("click", () => showNode(node));
+        node.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") showNode(node);
+        });
+      });
+
+      const summary = `# AMark 搜索功能方案\n\n- 分支：codex/search-feature（基于 main@80d15a3）\n- 当前文档：Ctrl/Cmd+F，编辑区浮层查找\n- 工作区：Ctrl/Cmd+Shift+F，侧栏搜索页签\n- 引擎：Rust 后台扫描 Markdown，150ms 防抖\n- 一致性：未保存文档内容覆盖磁盘版本\n- 首版：纯文本、大小写可选、结果分组与精确定位\n- 不包含：正则、替换、非 Markdown、持久化索引、语义搜索\n- 验证：Rust 单测、编辑器适配器集成测试、交互测试、vp check、vp test`;
+
+      function copyText(text) {
+        navigator.clipboard.writeText(text).then(() => {
+          const toast = document.getElementById("toast");
+          toast.classList.add("visible");
+          window.setTimeout(() => toast.classList.remove("visible"), 1500);
+        });
+      }
+
+      document.getElementById("copy-summary").addEventListener("click", () => copyText(summary));
+      document.getElementById("copy-handoff").addEventListener("click", () => copyText(summary));
+    </script>
+  </body>
+</html>
