@@ -727,7 +727,7 @@ body.theme-newsprint {
   --selection-text: #ffffff; /* 选区文字 */
 
   --editor-font-family:
-    "PT Serif", "Times New Roman", "FZBSJW", "方正报宋简体", "Source Han Serif SC", "SimSun",
+    "PT Serif", "Times New Roman", "FZBSJW", "方正报宋简体", "Source Han Serif SC VF", "SimSun",
     "宋体", "NSimSun", "新宋体", serif;
 }
 
@@ -753,7 +753,7 @@ body.theme-academic {
 
   --editor-font-family:
     "Latin Modern Roman", "Computer Modern Roman", "Computer Modern", "CMU Serif",
-    "Times New Roman", "Source Han Serif SC", "SimSun", "宋体", "Songti SC", "STSong",
+    "Times New Roman", "Source Han Serif SC VF", "SimSun", "宋体", "Songti SC", "STSong",
     "Noto Serif SC", "Noto Serif CJK SC", serif;
 }
 
