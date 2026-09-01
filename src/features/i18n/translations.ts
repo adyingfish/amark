@@ -10,13 +10,13 @@ const dictionary = {
 
   // File menu
   "menu.file.new": { zh: "新建", en: "New" },
-  "menu.file.open": { zh: "打开…", en: "Open…" },
-  "menu.file.openFolder": { zh: "打开文件夹…", en: "Open Folder…" },
-  "menu.file.openFolderByPath": { zh: "按路径打开文件夹…", en: "Open Folder by Path…" },
+  "menu.file.open": { zh: "打开", en: "Open" },
+  "menu.file.openFolder": { zh: "打开文件夹", en: "Open Folder" },
+  "menu.file.openFolderByPath": { zh: "按路径打开文件夹", en: "Open Folder by Path" },
   "menu.file.save": { zh: "保存", en: "Save" },
-  "menu.file.saveAs": { zh: "另存为…", en: "Save As…" },
-  "menu.file.exportPdf": { zh: "导出 PDF…", en: "Export PDF…" },
-  "menu.file.exportHtml": { zh: "导出 HTML…", en: "Export HTML…" },
+  "menu.file.saveAs": { zh: "另存为", en: "Save As" },
+  "menu.file.exportPdf": { zh: "导出 PDF", en: "Export PDF" },
+  "menu.file.exportHtml": { zh: "导出 HTML", en: "Export HTML" },
   "menu.file.close": { zh: "关闭", en: "Close" },
 
   // Edit menu
@@ -42,7 +42,7 @@ const dictionary = {
   "menu.theme.literary": { zh: "文艺", en: "Literary" },
   "menu.theme.newsprint": { zh: "报纸", en: "Newsprint" },
   "menu.theme.academic": { zh: "学术", en: "Academic" },
-  "menu.theme.import": { zh: "导入主题…", en: "Import Theme…" },
+  "menu.theme.import": { zh: "导入主题", en: "Import Theme" },
 
   // Workspace header / toolbar
   "toolbar.toggleSidebar": { zh: "切换侧栏", en: "Toggle Sidebar" },

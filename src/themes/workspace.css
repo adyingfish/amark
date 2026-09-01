@@ -103,7 +103,8 @@
   position: absolute;
   top: calc(100% + 6px);
   z-index: 1000;
-  min-width: 200px;
+  box-sizing: border-box;
+  width: 240px;
   padding: 4px;
   background: var(--bg-color, #fff);
   border: 1px solid var(--border-color, #e1e4e8);
@@ -1358,6 +1359,7 @@
   color: var(--text-color, #24292e);
   font-family: var(--editor-font-family);
   font-size: 17px;
+  font-weight: 450;
   line-height: 1.6;
   padding: 16px 40px 40px;
   tab-size: 2;

@@ -52,6 +52,7 @@ body {
   min-height: 100%;
   font-family: var(--editor-font-family);
   font-size: 17px;
+  font-weight: 400;
   line-height: 1.6;
   color: var(--text-color);
   /* 段落断行改用更优的启发式：消除段尾孤字、整理右边缘。继承给正文/列表/
@@ -661,6 +662,7 @@ body.theme-literary {
 }
 
 body.theme-literary #editor .ProseMirror {
+  font-weight: 500;
   line-height: 1.6;
   /* 段落级断行评分与行尾标点悬挂（悬挂仅 WebKit 生效），见 theme-academic 处说明 */
   text-wrap: pretty;
@@ -721,8 +723,8 @@ body.theme-newsprint {
   --selection-text: #ffffff; /* 选区文字 */
 
   --editor-font-family:
-    "PT Serif", "Times New Roman", "FZBSJW", "方正报宋简体", "SimSun", "宋体", "NSimSun", "新宋体",
-    serif;
+    "PT Serif", "Times New Roman", "FZBSJW", "方正报宋简体", "Source Han Serif SC", "SimSun",
+    "宋体", "NSimSun", "新宋体", serif;
 }
 
 body.theme-academic {
@@ -747,8 +749,8 @@ body.theme-academic {
 
   --editor-font-family:
     "Latin Modern Roman", "Computer Modern Roman", "Computer Modern", "CMU Serif",
-    "Times New Roman", "SimSun", "宋体", "Songti SC", "STSong", "Noto Serif SC",
-    "Noto Serif CJK SC", "Source Han Serif SC", serif;
+    "Times New Roman", "Source Han Serif SC", "SimSun", "宋体", "Songti SC", "STSong",
+    "Noto Serif SC", "Noto Serif CJK SC", serif;
 }
 
 /* 正文两端对齐 + 连字符，贴近 LaTeX 默认排版 */
