@@ -104,7 +104,7 @@
   top: calc(100% + 6px);
   z-index: 1000;
   box-sizing: border-box;
-  width: 240px;
+  width: 220px;
   padding: 4px;
   background: var(--bg-color, #fff);
   border: 1px solid var(--border-color, #e1e4e8);
@@ -209,7 +209,7 @@
 .sidebar {
   /* Width is driven by the sidebar resizer via this CSS variable; min/max here
      enforce the usable range even if the persisted value drifts. */
-  width: var(--sidebar-width, 240px);
+  width: var(--sidebar-width, 220px);
   min-width: 200px;
   max-width: 400px;
   flex-shrink: 0;

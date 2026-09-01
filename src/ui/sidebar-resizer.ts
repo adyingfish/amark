@@ -10,7 +10,7 @@
 // element, the resizer element, and one CSS variable — never the editor.
 
 const STORAGE_KEY = "amark-sidebar-width";
-const DEFAULT_WIDTH = 240;
+const DEFAULT_WIDTH = 220;
 // Keep the sidebar usable: it may neither collapse to nothing nor crowd out the
 // editor. These bounds mirror the min/max-width declared in workspace.css.
 const MIN_WIDTH = 200;

@@ -186,6 +186,10 @@ body {
 }
 
 /* LaTeX formulas (see milkdown-math-node.ts / milkdown-math-view.ts). */
+#editor .ProseMirror .katex {
+  font-size: 1.18em;
+}
+
 #editor .ProseMirror [data-type="math-block"],
 #editor .ProseMirror [data-type="math-inline"][data-display="true"] {
   margin: 0.5em 0;
