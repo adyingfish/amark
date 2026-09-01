@@ -690,7 +690,7 @@
 .workspace-tree-file-icon {
   display: inline-flex;
   align-items: center;
-  margin-right: 4px;
+  margin-right: 2px;
   color: var(--text-muted, #6a737d);
 }
 
