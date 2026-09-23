@@ -205,6 +205,11 @@ export function MenuBar(): ReactElement {
             },
             {
               kind: "item",
+              label: t("menu.theme.reading"),
+              run: () => runMenuAction("theme-reading"),
+            },
+            {
+              kind: "item",
               label: t("menu.theme.newsprint"),
               run: () => runMenuAction("theme-newsprint"),
             },

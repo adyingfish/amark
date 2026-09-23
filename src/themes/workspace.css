@@ -1588,6 +1588,28 @@ body.theme-literary {
   --danger-text: #8a2b1a; /* 危险提示文字 */
 }
 
+body.theme-reading {
+  --sidebar-bg: #f0ede4;
+  --tabs-bg: #e9e5da;
+  --tab-bg: #f2efe8;
+  --tab-hover-bg: #e3e0d6;
+  --hover-bg: #e9e5da;
+
+  --active-bg: #48695e;
+  --active-text: #ffffff;
+  --status-bg: #f0ede4;
+
+  --primary-color: #48695e;
+  --primary-on-color: #ffffff;
+
+  --warning-color: #7a6b43;
+  --external-update-bg: #ede8d6;
+  --external-update-text: #655b3e;
+
+  --danger-bg: #efe1de;
+  --danger-text: #8a4b44;
+}
+
 body.theme-newsprint {
   --sidebar-bg: #f3f2ee; /* 侧栏底 */
   --tabs-bg: #f3f2ee; /* 标签栏底 */

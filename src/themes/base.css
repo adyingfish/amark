@@ -428,7 +428,7 @@ body {
   padding: 2px 6px;
   border-radius: 3px;
   font-size: 0.875em;
-  font-family: "SF Mono", "Fira Code", Menlo, monospace;
+  font-family: "Maple Mono Normal NF CN", "SF Mono", "Fira Code", Menlo, monospace;
 }
 
 #editor .ProseMirror pre {
@@ -665,7 +665,48 @@ body.theme-literary {
     "STKaiti", "Songti SC", "Noto Serif SC", "Noto Serif CJK SC", "Source Han Serif SC", serif;
 }
 
-body.theme-literary #editor .ProseMirror {
+body.theme-reading {
+  --bg-color: #f6f3eb;
+  --text-color: #2e2c28;
+  --text-muted: #69665e;
+  --border-color: #ddd8cb;
+
+  --link-color: #385d59;
+
+  --code-bg: #ebe7dd;
+  --code-block-bg: #2e332f;
+  --code-block-text: #f5f3ec;
+
+  --blockquote-border: #7b9184;
+  --blockquote-bg: #efede5;
+
+  --table-header-bg: #eeebe2;
+  --table-border: #d9d4c9;
+
+  --selection-bg: rgba(74, 107, 94, 0.2);
+
+  --editor-font-family:
+    "FangSong", "仿宋", "FangSong_GB2312", "STFangsong", "华文仿宋", "Georgia", "Times New Roman",
+    "Source Han Serif SC VF", serif;
+}
+
+body.theme-reading #editor .ProseMirror h1,
+body.theme-reading #editor .ProseMirror h2,
+body.theme-reading #editor .ProseMirror h3,
+body.theme-reading #editor .ProseMirror h4,
+body.theme-reading #editor .ProseMirror h5,
+body.theme-reading #editor .ProseMirror h6 {
+  font-family: "FZXiaoBiaoSong-B05S", "方正小标宋简体", "Source Han Serif SC VF", serif;
+}
+
+body.theme-reading #editor .ProseMirror h1,
+body.theme-reading #editor .ProseMirror h2 {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+body.theme-literary #editor .ProseMirror,
+body.theme-reading #editor .ProseMirror {
   font-weight: 500;
   line-height: 1.6;
   /* 段落级断行评分与行尾标点悬挂（悬挂仅 WebKit 生效），见 theme-academic 处说明 */
@@ -681,15 +722,18 @@ body.theme-literary #editor .ProseMirror code {
   color: #c15f3c;
 }
 
-body.theme-literary #editor .ProseMirror pre {
+body.theme-literary #editor .ProseMirror pre,
+body.theme-reading #editor .ProseMirror pre {
   color: var(--code-block-text);
 }
 
-body.theme-literary #editor .ProseMirror pre code {
+body.theme-literary #editor .ProseMirror pre code,
+body.theme-reading #editor .ProseMirror pre code {
   color: inherit;
 }
 
-body.theme-literary #editor .ProseMirror blockquote {
+body.theme-literary #editor .ProseMirror blockquote,
+body.theme-reading #editor .ProseMirror blockquote {
   background: var(--blockquote-bg);
   padding: 15px 20px 15px 25px;
 }
@@ -698,7 +742,12 @@ body.theme-literary #editor .ProseMirror table th {
   border-bottom: 2px solid #d97757;
 }
 
-body.theme-literary #editor .ProseMirror table td {
+body.theme-reading #editor .ProseMirror table th {
+  border-bottom: 2px solid var(--blockquote-border);
+}
+
+body.theme-literary #editor .ProseMirror table td,
+body.theme-reading #editor .ProseMirror table td {
   border-left: none;
   border-right: none;
 }

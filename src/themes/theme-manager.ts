@@ -2,6 +2,7 @@ const themes: Record<string, string> = {
   light: "theme-light",
   dark: "theme-dark",
   literary: "theme-literary",
+  reading: "theme-reading",
   newsprint: "theme-newsprint",
   academic: "theme-academic",
 };

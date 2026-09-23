@@ -40,6 +40,7 @@ const dictionary = {
   "menu.theme.light": { zh: "浅色", en: "Light" },
   "menu.theme.dark": { zh: "深色", en: "Dark" },
   "menu.theme.literary": { zh: "文艺", en: "Literary" },
+  "menu.theme.reading": { zh: "阅读", en: "Reading" },
   "menu.theme.newsprint": { zh: "报纸", en: "Newsprint" },
   "menu.theme.academic": { zh: "学术", en: "Academic" },
   "menu.theme.import": { zh: "导入主题", en: "Import Theme" },

@@ -308,6 +308,9 @@ fn run_menu_action(_app: &AppHandle, _app_state: &AppState, window: &WebviewWind
         "theme-literary" => {
             let _ = window.emit("set-theme", "literary");
         }
+        "theme-reading" => {
+            let _ = window.emit("set-theme", "reading");
+        }
         "theme-newsprint" => {
             let _ = window.emit("set-theme", "newsprint");
         }
