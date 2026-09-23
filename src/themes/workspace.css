@@ -1589,25 +1589,37 @@ body.theme-literary {
 }
 
 body.theme-reading {
-  --sidebar-bg: #f0ede4;
-  --tabs-bg: #e9e5da;
-  --tab-bg: #f2efe8;
-  --tab-hover-bg: #e3e0d6;
-  --hover-bg: #e9e5da;
+  --sidebar-bg: #f7f7f7;
+  --tabs-bg: #f1f1f1;
+  --tab-bg: #ffffff;
+  --tab-hover-bg: #e6e6e6;
+  --hover-bg: #ededed;
 
-  --active-bg: #48695e;
+  --active-bg: #242424;
   --active-text: #ffffff;
-  --status-bg: #f0ede4;
+  --status-bg: #f7f7f7;
 
-  --primary-color: #48695e;
+  --primary-color: #242424;
   --primary-on-color: #ffffff;
 
-  --warning-color: #7a6b43;
-  --external-update-bg: #ede8d6;
-  --external-update-text: #655b3e;
+  --warning-color: #666666;
+  --external-update-bg: #ededed;
+  --external-update-text: #404040;
 
-  --danger-bg: #efe1de;
-  --danger-text: #8a4b44;
+  --danger-bg: #e8e8e8;
+  --danger-text: #242424;
+}
+
+body.theme-reading .agent-dot {
+  background: #a3a3a3;
+}
+
+body.theme-reading .agent-dot.active {
+  background: #242424;
+}
+
+body.theme-reading .agent-dot.cooldown {
+  background: #737373;
 }
 
 body.theme-newsprint {

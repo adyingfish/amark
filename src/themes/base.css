@@ -665,29 +665,88 @@ body.theme-literary {
     "STKaiti", "Songti SC", "Noto Serif SC", "Noto Serif CJK SC", "Source Han Serif SC", serif;
 }
 
+/* The CJK faces exclude Latin code points, even when an installed Chinese font
+   contains Latin glyphs. Separate faces preserve per-glyph fallback within each script. */
+@font-face {
+  font-family: "AMark Reading FangSong";
+  src: local("FangSong"), local("仿宋"), local("FangSong_GB2312");
+  unicode-range:
+    U+00B7, U+2014, U+2018-201D, U+2026, U+2E80-9FFF, U+F900-FAFF, U+FE10-FE6F, U+FF00-FFEF,
+    U+20000-2FA1F, U+30000-323AF;
+}
+
+@font-face {
+  font-family: "AMark Reading STFangsong";
+  src: local("STFangsong"), local("华文仿宋");
+  unicode-range:
+    U+00B7, U+2014, U+2018-201D, U+2026, U+2E80-9FFF, U+F900-FAFF, U+FE10-FE6F, U+FF00-FFEF,
+    U+20000-2FA1F, U+30000-323AF;
+}
+
+@font-face {
+  font-family: "AMark Reading Source Han Serif";
+  src: local("Source Han Serif SC VF");
+  font-weight: 100 900;
+  unicode-range:
+    U+00B7, U+2014, U+2018-201D, U+2026, U+2E80-9FFF, U+F900-FAFF, U+FE10-FE6F, U+FF00-FFEF,
+    U+20000-2FA1F, U+30000-323AF;
+}
+
+@font-face {
+  font-family: "AMark Reading XiaoBiaoSong";
+  src: local("FZXiaoBiaoSong-B05S"), local("方正小标宋简体");
+  unicode-range:
+    U+00B7, U+2014, U+2018-201D, U+2026, U+2E80-9FFF, U+F900-FAFF, U+FE10-FE6F, U+FF00-FFEF,
+    U+20000-2FA1F, U+30000-323AF;
+}
+
+@font-face {
+  font-family: "AMark Reading KaiTi";
+  src: local("KaiTi"), local("楷体");
+  /* The local upright glyphs satisfy <em> without synthetic slant. */
+  font-style: italic;
+  unicode-range:
+    U+00B7, U+2014, U+2018-201D, U+2026, U+2E80-9FFF, U+F900-FAFF, U+FE10-FE6F, U+FF00-FFEF,
+    U+20000-2FA1F, U+30000-323AF;
+}
+
+@font-face {
+  font-family: "AMark Reading WenKai";
+  src: local("Kaiti SC"), local("STKaiti"), local("LXGW WenKai");
+  font-style: italic;
+  unicode-range:
+    U+00B7, U+2014, U+2018-201D, U+2026, U+2E80-9FFF, U+F900-FAFF, U+FE10-FE6F, U+FF00-FFEF,
+    U+20000-2FA1F, U+30000-323AF;
+}
+
 body.theme-reading {
-  --bg-color: #f6f3eb;
-  --text-color: #2e2c28;
-  --text-muted: #69665e;
-  --border-color: #ddd8cb;
+  --bg-color: #ffffff;
+  --text-color: #171717;
+  --text-muted: #666666;
+  --border-color: #d9d9d9;
 
-  --link-color: #385d59;
+  --link-color: #242424;
 
-  --code-bg: #ebe7dd;
-  --code-block-bg: #2e332f;
-  --code-block-text: #f5f3ec;
+  --code-bg: #f2f2f2;
+  --code-block-bg: #f5f5f5;
+  --code-block-text: #171717;
 
-  --blockquote-border: #7b9184;
-  --blockquote-bg: #efede5;
+  --blockquote-border: #999999;
+  --blockquote-bg: #f7f7f7;
 
-  --table-header-bg: #eeebe2;
-  --table-border: #d9d4c9;
+  --table-header-bg: #f2f2f2;
+  --table-border: #d9d9d9;
 
-  --selection-bg: rgba(74, 107, 94, 0.2);
+  --selection-bg: rgba(0, 0, 0, 0.16);
 
+  --reading-latin-font-family: "Palatino Linotype", "Georgia", "Times New Roman";
+  --reading-cjk-body-font-family:
+    "AMark Reading FangSong", "AMark Reading STFangsong", "AMark Reading Source Han Serif";
+  --reading-cjk-heading-font-family: "AMark Reading XiaoBiaoSong", "AMark Reading Source Han Serif";
+  --reading-cjk-emphasis-font-family:
+    "AMark Reading KaiTi", "AMark Reading WenKai", "AMark Reading Source Han Serif";
   --editor-font-family:
-    "FangSong", "仿宋", "FangSong_GB2312", "STFangsong", "华文仿宋", "Georgia", "Times New Roman",
-    "Source Han Serif SC VF", serif;
+    var(--reading-cjk-body-font-family), var(--reading-latin-font-family), serif;
 }
 
 body.theme-reading #editor .ProseMirror h1,
@@ -696,7 +755,7 @@ body.theme-reading #editor .ProseMirror h3,
 body.theme-reading #editor .ProseMirror h4,
 body.theme-reading #editor .ProseMirror h5,
 body.theme-reading #editor .ProseMirror h6 {
-  font-family: "FZXiaoBiaoSong-B05S", "方正小标宋简体", "Source Han Serif SC VF", serif;
+  font-family: var(--reading-cjk-heading-font-family), var(--reading-latin-font-family), serif;
 }
 
 body.theme-reading #editor .ProseMirror h1,
@@ -705,9 +764,28 @@ body.theme-reading #editor .ProseMirror h2 {
   padding-bottom: 0;
 }
 
+body.theme-literary #editor .ProseMirror {
+  font-weight: 500;
+}
+
+body.theme-reading #editor .ProseMirror {
+  font-weight: 600;
+}
+
+/* Latin keeps its italic face; Chinese uses upright KaiTi without synthetic slant. */
+body.theme-reading #editor .ProseMirror em {
+  font-family: var(--reading-cjk-emphasis-font-family), var(--reading-latin-font-family), serif;
+  font-synthesis-style: none;
+}
+
+body.theme-reading #editor .ProseMirror a {
+  text-decoration: underline;
+  text-decoration-color: #999999;
+  text-underline-offset: 2px;
+}
+
 body.theme-literary #editor .ProseMirror,
 body.theme-reading #editor .ProseMirror {
-  font-weight: 500;
   line-height: 1.6;
   /* 段落级断行评分与行尾标点悬挂（悬挂仅 WebKit 生效），见 theme-academic 处说明 */
   text-wrap: pretty;
