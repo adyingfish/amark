@@ -1,9 +1,10 @@
 // file_watch.rs - Workspace file watching service
+use notify::event::{ModifyKind, RenameMode};
 use notify::{Config, Event, EventKind, PollWatcher, RecursiveMode, Watcher};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use tauri::{Emitter, WebviewWindow};
@@ -121,10 +122,13 @@ fn is_excluded_dir(name: &str) -> bool {
 /// walk and, from `start_workspace_watch`'s registrar thread, when a
 /// directory appears that may already have pre-existing children (e.g. one
 /// moved in from outside the workspace).
-fn watch_dir_tree(watcher: &mut dyn Watcher, dir: &Path) {
-    if watcher.watch(dir, RecursiveMode::NonRecursive).is_err() {
+fn watch_dir_tree(watcher: &mut dyn Watcher, watched_dirs: &mut HashSet<PathBuf>, dir: &Path) {
+    // notify's Windows backend replaces the entry for a duplicate watch
+    // without closing the previous directory handle and read request.
+    if watched_dirs.contains(dir) || watcher.watch(dir, RecursiveMode::NonRecursive).is_err() {
         return;
     }
+    watched_dirs.insert(dir.to_path_buf());
 
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
@@ -139,17 +143,58 @@ fn watch_dir_tree(watcher: &mut dyn Watcher, dir: &Path) {
         if is_excluded_dir(&name.to_string_lossy()) {
             continue;
         }
-        watch_dir_tree(watcher, &entry.path());
+        watch_dir_tree(watcher, watched_dirs, &entry.path());
     }
 }
 
-/// Spawn the background thread that registers watches for directories
-/// discovered after the initial walk (created, or moved/renamed in from
-/// outside an already-watched location). This must run on its own thread
-/// rather than inline in the notify event handler: both the inotify and
-/// poll backends invoke the event handler from the very thread that must
-/// also process a `watch()` call, so calling `watch()` synchronously from
-/// inside the callback would deadlock.
+fn queue_directory_event(event: &Event, sender: &mpsc::Sender<Event>) {
+    if matches!(
+        event.kind,
+        EventKind::Create(_) | EventKind::Remove(_) | EventKind::Modify(ModifyKind::Name(_))
+    ) {
+        let _ = sender.send(event.clone());
+    }
+}
+
+fn update_directory_watches(
+    watcher: &mut dyn Watcher,
+    watched_dirs: &mut HashSet<PathBuf>,
+    event: Event,
+) {
+    for (index, path) in event.paths.iter().enumerate() {
+        let add = match event.kind {
+            EventKind::Create(_) | EventKind::Modify(ModifyKind::Name(RenameMode::To)) => true,
+            EventKind::Remove(_) | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => false,
+            // For paired renames, notify puts the source first and the destination second.
+            EventKind::Modify(ModifyKind::Name(RenameMode::Both)) => index != 0,
+            // Some backends report the two sides of a rename without a direction.
+            EventKind::Modify(ModifyKind::Name(RenameMode::Any | RenameMode::Other)) => {
+                path.is_dir()
+            }
+            _ => return,
+        };
+        if add {
+            let excluded = path
+                .file_name()
+                .is_some_and(|name| is_excluded_dir(&name.to_string_lossy()));
+            if !excluded && path.is_dir() {
+                watch_dir_tree(watcher, watched_dirs, path);
+            }
+        } else if watched_dirs.contains(path) {
+            watched_dirs.retain(|dir| {
+                if !dir.starts_with(path) {
+                    return true;
+                }
+                // Some backends already discard watches for deleted directories.
+                let _ = watcher.unwatch(dir);
+                false
+            });
+        }
+    }
+}
+
+/// Update directory watches on a separate thread. The notify backends can
+/// wait for watch commands on the same thread that calls the event handler.
 ///
 /// Holds only a `Weak` handle so it never keeps `watcher` alive on its own:
 /// once the last strong `Arc` is dropped (`stop_workspace_watch`), the
@@ -157,13 +202,14 @@ fn watch_dir_tree(watcher: &mut dyn Watcher, dir: &Path) {
 /// too, closing the channel and ending this thread on its next receive.
 fn spawn_new_dir_registrar(
     watcher: &Arc<Mutex<Box<dyn Watcher + Send>>>,
-    new_dir_rx: std::sync::mpsc::Receiver<PathBuf>,
+    mut watched_dirs: HashSet<PathBuf>,
+    directory_events: mpsc::Receiver<Event>,
 ) {
     let weak_watcher = Arc::downgrade(watcher);
     let _ = thread::Builder::new()
         .name("amark-watch-register".to_string())
         .spawn(move || {
-            for path in new_dir_rx {
+            for event in directory_events {
                 let Some(watcher) = weak_watcher.upgrade() else {
                     break;
                 };
@@ -171,7 +217,7 @@ fn spawn_new_dir_registrar(
                     Ok(g) => g,
                     Err(_) => continue,
                 };
-                watch_dir_tree(&mut **guard, &path);
+                update_directory_watches(&mut **guard, &mut watched_dirs, event);
             }
         });
 }
@@ -190,33 +236,16 @@ pub fn start_workspace_watch(
     // Stop any existing watcher for this window
     stop_workspace_watch(&window_label, watchers);
 
-    // Newly discovered directories (created, or moved/renamed in from
-    // outside an already-watched location) are registered from a dedicated
-    // thread below, never from inside `handler` itself: both the inotify and
-    // poll backends invoke the event handler from the very thread that must
-    // also process a `watch()` call, so calling `watch()` synchronously from
-    // inside the callback would deadlock.
-    let (new_dir_tx, new_dir_rx) = std::sync::mpsc::channel::<PathBuf>();
+    // Forward directory changes to the registrar so the callback never
+    // blocks on a watch or unwatch command.
+    let (directory_tx, directory_rx) = mpsc::channel();
 
     let window_clone = window.clone();
     let handler = move |res: notify::Result<Event>| {
         let Ok(event) = res else { return };
         let show_hidden = show_hidden_flag.load(Ordering::Relaxed);
 
-        for path in &event.paths {
-            if !path.is_dir() {
-                continue;
-            }
-            let excluded = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .map(is_excluded_dir)
-                .unwrap_or(false);
-            if !excluded {
-                let _ = new_dir_tx.send(path.clone());
-            }
-        }
-
+        queue_directory_event(&event, &directory_tx);
         handle_watch_event(&window_clone, event, show_hidden);
     };
 
@@ -240,10 +269,11 @@ pub fn start_workspace_watch(
     // directory, skipping generated-noise subtrees entirely (see
     // `WATCH_EXCLUDED_DIRS`) instead of watching everything recursively from
     // the root and filtering events after the fact.
-    watch_dir_tree(&mut *watcher, &root_path);
+    let mut watched_dirs = HashSet::new();
+    watch_dir_tree(&mut *watcher, &mut watched_dirs, &root_path);
 
     let watcher = Arc::new(Mutex::new(watcher));
-    spawn_new_dir_registrar(&watcher, new_dir_rx);
+    spawn_new_dir_registrar(&watcher, watched_dirs, directory_rx);
 
     // Store the watcher
     {
@@ -326,7 +356,7 @@ fn handle_watch_event(window: &WebviewWindow, event: Event, show_hidden: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::mpsc;
+    use notify::event::{CreateKind, RemoveKind};
     use std::time::Instant;
 
     /// Each window must get its own flag (identity, not just equal value),
@@ -358,6 +388,75 @@ mod tests {
         dir
     }
 
+    #[derive(Default)]
+    struct RecordingWatcher(HashSet<PathBuf>);
+
+    impl Watcher for RecordingWatcher {
+        fn new<F: notify::EventHandler>(_: F, _: Config) -> notify::Result<Self> {
+            Ok(Self::default())
+        }
+
+        fn watch(&mut self, path: &Path, _: RecursiveMode) -> notify::Result<()> {
+            assert!(
+                self.0.insert(path.to_path_buf()),
+                "duplicate watch: {path:?}"
+            );
+            Ok(())
+        }
+
+        fn unwatch(&mut self, path: &Path) -> notify::Result<()> {
+            assert!(self.0.remove(path), "unregistered watch: {path:?}");
+            Ok(())
+        }
+
+        fn kind() -> notify::WatcherKind {
+            notify::WatcherKind::NullWatcher
+        }
+    }
+
+    #[test]
+    fn directory_watches_are_deduplicated_and_released() {
+        let root = unique_temp_dir("directory-lifecycle");
+        let notes = root.join("notes");
+        let nested = notes.join("nested");
+        std::fs::create_dir_all(&nested).unwrap();
+        let mut watcher = RecordingWatcher::default();
+        let mut watched_dirs = HashSet::new();
+        watch_dir_tree(&mut watcher, &mut watched_dirs, &root);
+
+        let (tx, rx) = mpsc::channel();
+        let modified = Event::new(EventKind::Modify(ModifyKind::Any)).add_path(notes.clone());
+        queue_directory_event(&modified, &tx);
+        assert!(rx.try_recv().is_err());
+
+        let created = Event::new(EventKind::Create(CreateKind::Folder)).add_path(notes.clone());
+        update_directory_watches(&mut watcher, &mut watched_dirs, created.clone());
+        assert_eq!(
+            watcher.0,
+            HashSet::from([root.clone(), notes.clone(), nested])
+        );
+
+        let moved = root.join("moved");
+        std::fs::rename(&notes, &moved).unwrap();
+        let renamed = Event::new(EventKind::Modify(ModifyKind::Name(RenameMode::Both)))
+            .add_path(notes.clone())
+            .add_path(moved.clone());
+        update_directory_watches(&mut watcher, &mut watched_dirs, renamed);
+        assert_eq!(
+            watcher.0,
+            HashSet::from([root.clone(), moved.clone(), moved.join("nested")])
+        );
+
+        std::fs::remove_dir_all(&moved).unwrap();
+        let removed = Event::new(EventKind::Remove(RemoveKind::Folder)).add_path(moved);
+        update_directory_watches(&mut watcher, &mut watched_dirs, removed);
+        std::fs::create_dir(&notes).unwrap();
+        update_directory_watches(&mut watcher, &mut watched_dirs, created);
+        assert_eq!(watcher.0, HashSet::from([root.clone(), notes]));
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     /// Excluded directories (node_modules, etc.) must never receive a watch:
     /// changes inside them should produce no events, while changes in a
     /// sibling directory that *is* watched must still be reported.
@@ -377,7 +476,7 @@ mod tests {
         })
         .unwrap();
 
-        watch_dir_tree(&mut watcher, &root);
+        watch_dir_tree(&mut watcher, &mut HashSet::new(), &root);
 
         // A file inside the excluded subtree must not surface an event.
         std::fs::write(root.join("node_modules/inner/file.txt"), "x").unwrap();
@@ -406,22 +505,10 @@ mod tests {
         let root = unique_temp_dir("new-dir");
 
         let (event_tx, event_rx) = mpsc::channel::<PathBuf>();
-        let (new_dir_tx, new_dir_rx) = mpsc::channel::<PathBuf>();
+        let (directory_tx, directory_rx) = mpsc::channel();
         let handler = move |res: notify::Result<Event>| {
             let Ok(event) = res else { return };
-            for path in &event.paths {
-                if !path.is_dir() {
-                    continue;
-                }
-                let excluded = path
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .map(is_excluded_dir)
-                    .unwrap_or(false);
-                if !excluded {
-                    let _ = new_dir_tx.send(path.clone());
-                }
-            }
+            queue_directory_event(&event, &directory_tx);
             for p in event.paths {
                 let _ = event_tx.send(p);
             }
@@ -429,9 +516,10 @@ mod tests {
 
         let mut watcher: Box<dyn Watcher + Send> =
             Box::new(notify::recommended_watcher(handler).unwrap());
-        watch_dir_tree(&mut *watcher, &root);
+        let mut watched_dirs = HashSet::new();
+        watch_dir_tree(&mut *watcher, &mut watched_dirs, &root);
         let watcher = Arc::new(Mutex::new(watcher));
-        spawn_new_dir_registrar(&watcher, new_dir_rx);
+        spawn_new_dir_registrar(&watcher, watched_dirs, directory_rx);
 
         // Create a brand-new subdirectory with a file already inside it
         // (simulating a directory moved in from elsewhere), then wait for
