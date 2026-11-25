@@ -92,7 +92,9 @@ AMark 正在试图打造那个像样的阅读器：
 
 ## 本地开发
 
-安装 Vite+ 和 Bun 后运行 `vp install`。用 `vp run desktop:dev` 启动带热更新的桌面窗口，`vp run desktop:test` 运行桌面服务测试，`vp run desktop:dist` 在 `release/` 中生成当前平台的安装包。
+安装 Vite+ 和 Bun 后运行 `vp install`。用 `vp run desktop:dev` 启动 electron-vite 开发窗口。修改主进程会自动重启应用，修改预加载脚本会重新加载窗口，界面支持热更新。
+
+用 `vp check` 检查代码，`vp test` 运行前端测试，`vp run desktop:test` 运行桌面服务测试。`vp run desktop:dist` 在 `release/` 中生成当前平台的安装包。
 
 ## License
 

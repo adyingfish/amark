@@ -4,12 +4,11 @@ directories:
   output: release
   buildResources: resources/icons
 files:
-  - dist/**/*
-  - dist-electron/*.js
+  - out/**/*
   - resources/icons/icon.png
 asarUnpack:
-  - dist-electron/workspace-search.js
-  - dist-electron/workspace-files.js
+  - out/main/workspace-search.js
+  - out/main/chunks/*.js
 npmRebuild: false
 win:
   target: nsis

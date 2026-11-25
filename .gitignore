@@ -3,6 +3,8 @@ node_modules/
 
 # Build outputs
 dist/
+/out/
+/electron.vite.config.mts.*.mjs
 dist-ssr/
 *.local
 

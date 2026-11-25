@@ -60,7 +60,7 @@ function rendererURL(devUrl: string | undefined, packaged: boolean) {
     url.username ||
     url.password
   ) {
-    throw new Error("AMARK_DEV_URL must point to a local development server");
+    throw new Error("ELECTRON_RENDERER_URL must point to a local development server");
   }
   return url.href;
 }

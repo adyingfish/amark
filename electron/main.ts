@@ -41,7 +41,7 @@ type ShellHandlers = {
   ) => Commands[K]["returns"] | Promise<Commands[K]["returns"]>;
 };
 
-const entry = rendererURL(process.env.AMARK_DEV_URL, app.isPackaged);
+const entry = rendererURL(process.env.ELECTRON_RENDERER_URL, app.isPackaged);
 const windows = new Map<number, WindowState>();
 const assets = new Map<string, Workspace>();
 const printJobs = new Map<string, string>();
@@ -138,7 +138,7 @@ async function createWindow(files: string[] = []) {
     backgroundColor: "#faf9f5",
     icon: path.join(app.getAppPath(), "resources", "icons", "icon.png"),
     webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
+      preload: path.join(__dirname, "../preload/preload.js"),
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
@@ -470,7 +470,7 @@ if (!app.requestSingleInstanceLock()) {
         assets,
         printJobs,
         entry,
-        dist: path.join(app.getAppPath(), "dist"),
+        dist: path.join(app.getAppPath(), "out", "renderer"),
       });
       session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) =>
         callback(false),

@@ -5,15 +5,15 @@
   "description": "Local Markdown workspace for reading and editing agent output",
   "homepage": "https://github.com/adyingfish/amark",
   "author": "AMark contributors",
-  "main": "dist-electron/main.js",
+  "main": "out/main/main.js",
   "scripts": {
     "prepare": "lefthook install",
-    "desktop:dev": "vp run desktop:build && node build/desktop-dev.mjs",
-    "desktop:start": "vp run desktop:build && electron .",
-    "desktop:pack": "vp run desktop:build && vp build && electron-builder --dir",
-    "desktop:dist": "vp run desktop:build && vp build && electron-builder",
-    "desktop:test": "vp run desktop:build && node --test electron/*.test.cjs",
-    "desktop:build": "tsc -p tsconfig.electron.json"
+    "desktop:dev": "electron-vite dev --watch",
+    "desktop:start": "vp run desktop:build && electron-vite preview --skipBuild",
+    "desktop:pack": "vp run desktop:build && electron-builder --dir",
+    "desktop:dist": "vp run desktop:build && electron-builder",
+    "desktop:test": "tsc -p tsconfig.electron.json && node --test electron/*.test.cjs",
+    "desktop:build": "tsc --noEmit -p tsconfig.electron.json && electron-vite build"
   },
   "dependencies": {
     "chokidar": "4.0.3"
@@ -32,6 +32,7 @@
     "clsx": "^2.1.1",
     "electron": "45.5.0",
     "electron-builder": "26.18.0",
+    "electron-vite": "6.0.0",
     "hyphen": "^1.14.1",
     "jsdom": "^29.1.1",
     "katex": "^0.17.0",

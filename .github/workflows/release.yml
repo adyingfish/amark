@@ -38,7 +38,7 @@ jobs:
           node-version: 24
       - run: bun install --frozen-lockfile
       - run: bun run desktop:test
-      - run: bun run vp build
+      - run: bun run desktop:build
       - run: bun run electron-builder ${{ matrix.args }} --publish never
       - name: Check out the old Windows installer source
         if: runner.os == 'Windows' && inputs.test_windows_upgrade

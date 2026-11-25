@@ -93,7 +93,9 @@ Once installed, open your project directory with AMark — say, the repo Claude 
 
 ## Local development
 
-With Vite+ and Bun installed, run `vp install`. Use `vp run desktop:dev` to launch the desktop app with hot reload, `vp run desktop:test` for desktop service tests, and `vp run desktop:dist` to build the installer for your platform in `release/`.
+With Vite+ and Bun installed, run `vp install`. Start electron-vite with `vp run desktop:dev`. Editing the main process restarts the app, editing the preload script reloads the window, and renderer changes support hot module replacement.
+
+Run `vp check` for code checks, `vp test` for frontend tests, and `vp run desktop:test` for desktop service tests. Use `vp run desktop:dist` to build the installer for your platform in `release/`.
 
 ## License
 
