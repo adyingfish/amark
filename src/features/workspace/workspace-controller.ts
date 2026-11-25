@@ -1,19 +1,17 @@
 // workspace-controller.ts - Workspace business logic
-import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@/services/desktop";
 import { workspaceStore } from "./workspace-store";
 import { documentStore } from "../document/document-store";
 import { tabsStore } from "../tabs/tabs-store";
 import { activityStore } from "../activity/activity-store";
 import { findFileNode, flattenFileTree, rewriteDescendantPath } from "./workspace-utils";
 import { getShowHiddenFiles, setShowHiddenFiles } from "./workspace-preferences";
-import type { OpenWorkspaceResult, WorkspaceScanResult } from "./workspace-types";
 
 // ── Open workspace ───────────────────────────────────────────────────────────
 
 export async function openWorkspaceFolder(): Promise<boolean> {
   try {
-    const result = await invoke<OpenWorkspaceResult>("open_workspace_folder");
+    const result = await invoke("open_workspace_folder");
 
     if (!result.success || !result.root_path) {
       // A backend error here (e.g. a path that failed to scan) was previously
@@ -41,7 +39,7 @@ export async function openWorkspaceFolder(): Promise<boolean> {
 export async function openWorkspaceByPath(rootPath: string): Promise<boolean> {
   try {
     // Scan the workspace
-    const scanResult = await invoke<WorkspaceScanResult>("scan_workspace", {
+    const scanResult = await invoke("scan_workspace", {
       rootPath,
       showHidden: getShowHiddenFiles(),
     });
@@ -72,11 +70,12 @@ export async function refreshWorkspace(): Promise<boolean> {
   if (!rootPath) return false;
 
   try {
-    const scanResult = await invoke<WorkspaceScanResult>("scan_workspace", {
+    const scanResult = await invoke("scan_workspace", {
       rootPath,
       showHidden: getShowHiddenFiles(),
     });
 
+    if (workspaceStore.getRootPath() !== rootPath) return false;
     workspaceStore.setFiles(scanResult.files);
     return true;
   } catch (error) {
@@ -149,7 +148,7 @@ export async function openFileFromTree(filePath: string, fileName: string): Prom
   }
 
   try {
-    const result = await invoke<{ path: string; content: string }>("read_file", {
+    const result = await invoke("read_file", {
       path: filePath,
     });
 
@@ -196,7 +195,7 @@ export function newUntitledFile(): void {
  * translate and surface it to the user.
  */
 export async function createFileInTree(parentPath: string, name: string): Promise<string> {
-  const newPath = await invoke<string>("create_markdown_file", { parentPath, name });
+  const newPath = await invoke("create_markdown_file", { parentPath, name });
   markSelfInitiated(newPath);
   await refreshWorkspace();
   return newPath;
@@ -208,7 +207,7 @@ export async function createFileInTree(parentPath: string, name: string): Promis
  * name collision.
  */
 export async function createDirectoryInTree(parentPath: string, name: string): Promise<string> {
-  const newPath = await invoke<string>("create_directory", { parentPath, name });
+  const newPath = await invoke("create_directory", { parentPath, name });
   await refreshWorkspace();
   return newPath;
 }
@@ -220,7 +219,7 @@ export async function createDirectoryInTree(parentPath: string, name: string): P
  */
 export async function renameFileInTree(path: string, newName: string): Promise<string> {
   markSelfInitiated(path);
-  const newPath = await invoke<string>("rename_path", { path, newName });
+  const newPath = await invoke("rename_path", { path, newName });
   if (newPath === path) return newPath;
 
   markSelfInitiated(newPath);
@@ -254,7 +253,7 @@ export async function renameDirectoryInTree(path: string, newName: string): Prom
   const nestedFiles = dirNode ? flattenFileTree([dirNode]) : [];
 
   markSelfInitiated(path);
-  const newPath = await invoke<string>("rename_path", { path, newName });
+  const newPath = await invoke("rename_path", { path, newName });
   if (newPath === path) return newPath;
   markSelfInitiated(newPath);
 
@@ -295,7 +294,7 @@ export async function renameDirectoryInTree(path: string, newName: string): Prom
  */
 export async function deleteFileInTree(path: string): Promise<void> {
   markSelfInitiated(path);
-  await invoke<boolean>("delete_path", { path });
+  await invoke("delete_path", { path });
 
   if (tabsStore.isOpen(path)) {
     tabsStore.closeTab(path);
@@ -346,13 +345,7 @@ function createDebouncer(fn: () => void, debounceMs: number, maxWaitMs: number) 
   return { schedule, cancel };
 }
 
-export async function setupWorkspaceListeners(): Promise<() => void> {
-  // Window-scoped, not the global listen() from "@tauri-apps/api/event": the
-  // backend targets these events at this window's label via emit_to, but a
-  // listener registered with the global listen() (target "Any") receives
-  // every window's events regardless of how narrowly the backend targets
-  // them — see handle_watch_event in file_watch.rs.
-  const currentWindow = getCurrentWindow();
+export function setupWorkspaceListeners(): () => void {
   const unlistens: (() => void)[] = [];
 
   const workspaceRefreshDebouncer = createDebouncer(
@@ -363,71 +356,67 @@ export async function setupWorkspaceListeners(): Promise<() => void> {
   const scheduleWorkspaceRefresh = workspaceRefreshDebouncer.schedule;
 
   const fileChangedDebouncers = new Map<string, ReturnType<typeof createDebouncer>>();
-  function scheduleFileChanged(path: string): void {
-    let debouncer = fileChangedDebouncers.get(path);
+  function scheduleFileChanged(path: string, rootPath: string): void {
+    // A file can belong to both the previous workspace and its nested replacement.
+    const key = rootPath + "\0" + path;
+    let debouncer = fileChangedDebouncers.get(key);
     if (!debouncer) {
       debouncer = createDebouncer(
         () => {
-          fileChangedDebouncers.delete(path);
-          handleWorkspaceFileChanged(path);
+          fileChangedDebouncers.delete(key);
+          if (workspaceStore.getRootPath() === rootPath)
+            void handleWorkspaceFileChanged(path, rootPath);
         },
         WATCHER_DEBOUNCE_MS,
         WATCHER_MAX_WAIT_MS,
       );
-      fileChangedDebouncers.set(path, debouncer);
+      fileChangedDebouncers.set(key, debouncer);
     }
     debouncer.schedule();
   }
 
   // File changed event
-  const unlistenChanged = await currentWindow.listen<{ path: string }>(
-    "workspace://file-changed",
-    (e) => {
-      scheduleFileChanged(e.payload.path);
-    },
-  );
+  const unlistenChanged = window.amark.on("workspace://file-changed", (e) => {
+    if (workspaceStore.getRootPath() === e.rootPath) scheduleFileChanged(e.path, e.rootPath);
+  });
   unlistens.push(unlistenChanged);
 
   // File created event
-  const unlistenCreated = await currentWindow.listen<{ path: string }>(
-    "workspace://file-created",
-    (e) => {
-      // Refresh the file tree to show new file
-      scheduleWorkspaceRefresh();
+  const unlistenCreated = window.amark.on("workspace://file-created", (e) => {
+    if (workspaceStore.getRootPath() !== e.rootPath) return;
+    // Refresh the file tree to show new file
+    scheduleWorkspaceRefresh();
 
-      // Skip surfacing user-initiated creations (via the tree UI) as external changes.
-      if (takeSelfInitiated(e.payload.path)) return;
+    // Skip surfacing user-initiated creations (via the tree UI) as external changes.
+    if (takeSelfInitiated(e.path)) return;
 
-      activityStore.addChange(e.payload.path);
-    },
-  );
+    activityStore.addChange(e.path);
+  });
   unlistens.push(unlistenCreated);
 
   // File removed event
-  const unlistenRemoved = await currentWindow.listen<{ path: string }>(
-    "workspace://file-removed",
-    (e) => {
-      const filePath = e.payload.path;
+  const unlistenRemoved = window.amark.on("workspace://file-removed", (e) => {
+    if (workspaceStore.getRootPath() !== e.rootPath) return;
+    const filePath = e.path;
 
-      // Refresh the file tree
-      scheduleWorkspaceRefresh();
+    // Refresh the file tree
+    scheduleWorkspaceRefresh();
 
-      // Skip surfacing user-initiated deletions/renames (via the tree UI) as external
-      // changes; the tree-driven controller has already adjusted any open tab.
-      if (takeSelfInitiated(filePath)) return;
+    // Skip surfacing user-initiated deletions/renames (via the tree UI) as external
+    // changes; the tree-driven controller has already adjusted any open tab.
+    if (takeSelfInitiated(filePath)) return;
 
-      activityStore.addChange(filePath);
+    activityStore.addChange(filePath);
 
-      if (tabsStore.isOpen(filePath)) {
-        if (documentStore.isDirty(filePath)) {
-          documentStore.markDeleted(filePath);
-        } else {
-          tabsStore.closeTab(filePath);
-          documentStore.unloadDocument(filePath);
-        }
+    if (tabsStore.isOpen(filePath)) {
+      if (documentStore.isDirty(filePath)) {
+        documentStore.markDeleted(filePath);
+      } else {
+        tabsStore.closeTab(filePath);
+        documentStore.unloadDocument(filePath);
       }
-    },
-  );
+    }
+  });
   unlistens.push(unlistenRemoved);
 
   // Return cleanup function
@@ -441,16 +430,17 @@ export async function setupWorkspaceListeners(): Promise<() => void> {
   };
 }
 
-async function handleWorkspaceFileChanged(filePath: string): Promise<void> {
+async function handleWorkspaceFileChanged(filePath: string, rootPath: string): Promise<void> {
   if (!documentStore.hasDocument(filePath)) {
     activityStore.addChange(filePath);
     return;
   }
 
   try {
-    const result = await invoke<{ path: string; content: string }>("read_file", {
+    const result = await invoke("read_file", {
       path: filePath,
     });
+    if (workspaceStore.getRootPath() !== rootPath) return;
     const document = documentStore.getDocument(filePath);
     if (!document) return;
 
@@ -471,6 +461,7 @@ async function handleWorkspaceFileChanged(filePath: string): Promise<void> {
 
     documentStore.markExternalUpdate(filePath);
   } catch (error) {
+    if (workspaceStore.getRootPath() !== rootPath) return;
     console.error("Failed to handle workspace file change:", error);
     documentStore.markExternalUpdate(filePath);
   }

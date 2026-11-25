@@ -4,9 +4,9 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { katexWoff2OnlyPlugin } from "./build/katex-woff2-only";
 
-// https://tauri.app/reference/config/#devurl
 export default defineConfig({
   plugins: [katexWoff2OnlyPlugin(), react(), tailwindcss()],
+  test: { include: ["src/**/*.test.{ts,tsx}", "build/**/*.test.ts"] },
   staged: {
     "**/*.{css,html,js,json,jsx,md,mdx,ts,tsx,yaml,yml}": "vp check --fix",
   },
@@ -20,17 +20,8 @@ export default defineConfig({
     port: 1420,
     strictPort: true,
     watch: {
-      // tell vite to ignore watching src-tauri
-      ignored: ["**/src-tauri/**"],
+      ignored: ["**/electron/**", "**/release/**", "**/local/**"],
     },
   },
-  envPrefix: ["VITE_", "TAURI_ENV_"],
-  build: {
-    // Tauri uses Chromium on Windows and WebKit on macOS and Linux
-    target: process.env.TAURI_ENV_PLATFORM === "windows" ? "chrome105" : "safari15",
-    // don't minify for debug builds
-    minify: !process.env.TAURI_ENV_DEBUG ? "oxc" : false,
-    // produce sourcemaps for debug builds
-    sourcemap: !!process.env.TAURI_ENV_DEBUG,
-  },
+  build: { target: "chrome150" },
 });

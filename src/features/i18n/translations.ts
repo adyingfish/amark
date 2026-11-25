@@ -183,11 +183,12 @@ const dictionary = {
   "toast.themeImported": { zh: "主题导入成功", en: "Theme imported" },
   "toast.themeImportFailed": { zh: "主题导入失败", en: "Theme import failed" },
   "toast.pdfExported": { zh: "PDF 导出成功", en: "PDF exported" },
+  "toast.htmlExportFailed": { zh: "HTML 导出失败", en: "HTML export failed" },
   "toast.pdfExportFailed": { zh: "PDF 导出失败", en: "PDF export failed" },
   "file.dialog.markdown": { zh: "Markdown 文件", en: "Markdown" },
   "file.dialog.allFiles": { zh: "所有文件", en: "All Files" },
 
-  // Workspace error codes (see src-tauri WorkspaceError) → translated toast text
+  // Workspace error codes → translated toast text
   "error.workspace.nameEmpty": { zh: "名称不能为空", en: "Name cannot be empty" },
   "error.workspace.nameHasSeparator": {
     zh: "名称不能包含路径分隔符",

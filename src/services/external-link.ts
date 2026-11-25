@@ -3,7 +3,7 @@
 // Editor-agnostic on purpose: the preview path only needs a rendered <a>
 // element, and the source path works on raw Markdown text. Neither imports the
 // editor, so Ctrl+click-to-open keeps working if the editor engine changes.
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@/services/desktop";
 
 /** True when the click should open a link instead of editing — Ctrl (or Cmd on
  * macOS) held down. */

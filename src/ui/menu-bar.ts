@@ -1,11 +1,17 @@
-// menu-bar.ts - Dispatches menu actions to Rust (editor-agnostic UI layer).
-//
-// The menu bar UI itself now lives in App.tsx as a React component; this just
-// fires the same Rust-side `menu_action` command the former native menu used,
-// so keyboard shortcuts and the React menu bar share one action-dispatch path.
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@/services/desktop";
 
-/** Fire a Rust-side menu action by id (mirrors the former native menu events). */
+/** Dispatch a menu or keyboard action to the current window. */
 export function runMenuAction(id: string): void {
+  // Chromium's native page zoom is shared across windows with the same origin.
+  const style = document.documentElement.style;
+  if (id === "view-zoom-reset") {
+    style.zoom = "1";
+    return;
+  }
+  if (id === "view-zoom-in" || id === "view-zoom-out") {
+    const next = Number.parseFloat(style.zoom || "1") + (id === "view-zoom-in" ? 0.1 : -0.1);
+    style.zoom = Math.max(0.5, next).toFixed(1);
+    return;
+  }
   void invoke("menu_action", { id });
 }

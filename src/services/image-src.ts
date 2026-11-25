@@ -5,9 +5,7 @@
 // resolveImageSrc from its toDOM, and App.tsx keeps the base directory in
 // sync with the active document. A markdown image like `![](./assets/a.png)`
 // is a filesystem path relative to the document, which the webview cannot
-// fetch directly — it must go through Tauri's asset protocol via
-// convertFileSrc. Remote/data URLs pass through untouched.
-import { convertFileSrc } from "@tauri-apps/api/core";
+// fetch directly. The local asset protocol serves images from authorized paths.
 
 // URL scheme prefix (http:, data:, asset:, untitled:, ...). A single letter
 // followed by ":\" or ":/" is a Windows drive, not a scheme — checked first.
@@ -68,16 +66,16 @@ export function resolveLocalImagePath(src: string, base: string | null): string 
 /**
  * Map an image src to something the webview can load: local paths become
  * asset-protocol URLs (streamed by the webview, backed by the scope the
- * Rust side granted for the open workspace/document), everything else is
+ * main process granted for the open workspace/document), everything else is
  * returned unchanged.
  */
 export function resolveImageSrc(src: string): string {
   const localPath = resolveLocalImagePath(src, baseDir);
-  return localPath === null ? src : convertFileSrc(localPath);
+  return localPath === null ? src : window.amark.assetUrl(localPath);
 }
 
 // Join base + relative and collapse "." / ".." segments. Forward slashes as
-// output separator — Windows accepts them, and convertFileSrc only needs a
+// output separator — Windows accepts them, and the asset protocol only needs a
 // well-formed absolute path.
 function joinAndNormalize(base: string, relative: string): string {
   const segments = base.split(/[\\/]+/).filter((segment) => segment.length > 0);

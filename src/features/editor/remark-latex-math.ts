@@ -3,9 +3,9 @@
 // These need micromark constructs so Markdown emphasis/link syntax inside a
 // formula is not parsed first. Display formulas split their surrounding
 // paragraph into proper block nodes before Milkdown consumes the mdast tree.
-import type { Root } from "mdast";
+import type { Data, Root } from "mdast";
 import type { Extension as FromMarkdownExtension, Handle } from "mdast-util-from-markdown";
-import type { Construct, Extension, TokenType, Tokenizer } from "micromark-util-types";
+import type { Construct, Extension, State, TokenType, Tokenizer } from "micromark-util-types";
 import type { Plugin } from "unified";
 
 const DISPLAY_KEY = "amarkLatexDisplayMath";
@@ -71,7 +71,7 @@ function mathTokenizer(
       return between;
     }
 
-    function between(code: number | null) {
+    function between(code: number | null): State | undefined {
       if (code === null) return nok(code);
       if (code === 92) return effects.attempt(close, done, escapedDataStart)(code);
       if (code === -5 || code === -4 || code === -3) {
@@ -177,7 +177,7 @@ interface SourceNode {
   type?: string;
   value?: string;
   meta?: string | null;
-  data?: Record<string, unknown>;
+  data?: Data & { [DISPLAY_KEY]?: boolean };
   position?: {
     start?: { line?: number; column?: number; offset?: number };
     end?: { line?: number; column?: number; offset?: number };

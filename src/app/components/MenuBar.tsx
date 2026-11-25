@@ -1,5 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@/services/desktop";
 import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "../../features/i18n/i18n-context";
@@ -87,7 +86,11 @@ export function MenuBar(): ReactElement {
             run: () => runMenuAction("menu-export-html"),
           },
           { kind: "separator" },
-          { kind: "item", label: t("menu.file.close"), run: () => void getCurrentWindow().close() },
+          {
+            kind: "item",
+            label: t("menu.file.close"),
+            run: () => void invoke("window_request_close"),
+          },
         ],
       },
       {
@@ -97,13 +100,13 @@ export function MenuBar(): ReactElement {
             kind: "item",
             label: t("menu.edit.undo"),
             shortcut: "Ctrl+Z",
-            run: () => document.execCommand("undo"),
+            run: () => runMenuAction("edit-undo"),
           },
           {
             kind: "item",
             label: t("menu.edit.redo"),
             shortcut: "Ctrl+Shift+Z",
-            run: () => document.execCommand("redo"),
+            run: () => runMenuAction("edit-redo"),
           },
           { kind: "separator" },
           {
@@ -123,25 +126,25 @@ export function MenuBar(): ReactElement {
             kind: "item",
             label: t("menu.edit.cut"),
             shortcut: "Ctrl+X",
-            run: () => document.execCommand("cut"),
+            run: () => runMenuAction("edit-cut"),
           },
           {
             kind: "item",
             label: t("menu.edit.copy"),
             shortcut: "Ctrl+C",
-            run: () => document.execCommand("copy"),
+            run: () => runMenuAction("edit-copy"),
           },
           {
             kind: "item",
             label: t("menu.edit.paste"),
             shortcut: "Ctrl+V",
-            run: () => document.execCommand("paste"),
+            run: () => runMenuAction("edit-paste"),
           },
           {
             kind: "item",
             label: t("menu.edit.selectAll"),
             shortcut: "Ctrl+A",
-            run: () => document.execCommand("selectAll"),
+            run: () => runMenuAction("edit-select-all"),
           },
         ],
       },
@@ -220,7 +223,7 @@ export function MenuBar(): ReactElement {
             },
           ];
 
-          const custom = await invoke<string[]>("list_custom_themes").catch(() => [] as string[]);
+          const custom = await invoke("list_custom_themes").catch(() => [] as string[]);
           if (custom.length > 0) {
             built.push({ kind: "separator" });
             for (const fileName of custom) {

@@ -140,13 +140,13 @@ class DocumentStore {
     this.emit();
   }
 
-  markSaved(filePath: string): void {
+  markSaved(filePath: string, savedMarkdown: string): void {
     const doc = this.documents.get(filePath);
     if (!doc) return;
     this.documents.set(filePath, {
       ...doc,
-      lastSavedMarkdown: doc.markdown,
-      saveStatus: "saved",
+      lastSavedMarkdown: savedMarkdown,
+      saveStatus: doc.markdown === savedMarkdown ? "saved" : "dirty",
       hasPendingExternalUpdate: false,
       isDeleted: false,
     });
@@ -231,7 +231,7 @@ class DocumentStore {
    * Save-As (and an untitled buffer's first save), where the current in-memory
    * content has just been written to `newPath` on disk.
    */
-  adoptPath(oldPath: string, newPath: string): void {
+  adoptPath(oldPath: string, newPath: string, savedMarkdown: string): void {
     const doc = this.documents.get(oldPath);
     if (!doc) return;
 
@@ -241,8 +241,8 @@ class DocumentStore {
       ...doc,
       filePath: newPath,
       fileName,
-      lastSavedMarkdown: doc.markdown,
-      saveStatus: "saved",
+      lastSavedMarkdown: savedMarkdown,
+      saveStatus: doc.markdown === savedMarkdown ? "saved" : "dirty",
       hasPendingExternalUpdate: false,
       isDeleted: false,
       isUntitled: false,

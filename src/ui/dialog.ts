@@ -1,7 +1,6 @@
 // dialog.ts - Lightweight modal prompt / confirm dialogs (editor-agnostic UI).
 //
-// The Tauri webview disables the native window.prompt / window.confirm, so the
-// tree's create / rename / delete flows use these small body-anchored modals.
+// The file tree uses these prompts when creating, renaming or deleting entries.
 import { t } from "../features/i18n/i18n-context";
 
 interface PromptOptions {

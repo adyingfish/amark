@@ -1,5 +1,4 @@
-// workspace-errors.ts - Translate the structured WorkspaceError payload the
-// Rust backend returns (see src-tauri/src/services/workspace_error.rs) into
+// workspace-errors.ts - Translate workspace errors from the main process into
 // localized toast text.
 import { translate, workspaceEntryExistsMessage, type Locale } from "../i18n/translations";
 

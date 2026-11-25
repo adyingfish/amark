@@ -1,0 +1,40 @@
+appId: ai.marswave.amark
+productName: AMark
+directories:
+  output: release
+  buildResources: resources/icons
+files:
+  - dist/**/*
+  - electron/**/*.cjs
+  - "!electron/**/*.test.cjs"
+  - resources/icons/icon.png
+asarUnpack:
+  - electron/workspace-search.cjs
+  - electron/workspace-files.cjs
+npmRebuild: false
+fileAssociations:
+  - ext: [md, markdown, mdown, mkd]
+    name: AMark.Markdown
+    description: Markdown Document
+    role: Editor
+    mimeType: text/markdown
+win:
+  target: nsis
+  icon: resources/icons/icon.ico
+nsis:
+  # The Tauri installer registered this exact per-user uninstall key.
+  guid: AMark
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: AMark-${version}-${arch}-setup.${ext}
+mac:
+  target: dmg
+  category: public.app-category.productivity
+  icon: resources/icons/icon.icns
+linux:
+  syncDesktopName: true
+  target: deb
+  category: Office
+  icon: resources/icons/icon.png
+  maintainer: adyingfish <adyingfish@users.noreply.github.com>

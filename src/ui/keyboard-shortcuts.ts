@@ -1,7 +1,7 @@
 // keyboard-shortcuts.ts - Global accelerators (editor-agnostic UI layer).
 //
 // The native menu used to register OS accelerators; with the menu removed they
-// are re-implemented here. Each shortcut dispatches the same Rust-side action
+// are re-implemented here. Each shortcut dispatches the same menu action
 // id via `menu_action`. Edit shortcuts (undo/redo/cut/copy/paste/select-all)
 // are intentionally left to the webview's built-in handling.
 import { runMenuAction } from "./menu-bar";

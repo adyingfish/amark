@@ -10,11 +10,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { homeDir } from "@tauri-apps/api/path";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { open } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@/services/desktop";
 import { FolderOpen, PanelLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -31,9 +27,9 @@ import { ViewModeSwitch } from "./components/ViewModeSwitch";
 import { WindowControls } from "./components/WindowControls";
 import { WorkspaceTreeView } from "./components/WorkspaceTreeView";
 import type { AgentState } from "./app-utils";
+import { setupWindowClose } from "./window-close";
 import { navigateToOutlineHeading } from "./outline-navigation";
 import { t as translateStatic, useI18n } from "../features/i18n/i18n-context";
-import { languageStore } from "../features/i18n/language-store";
 import {
   deleteFileMessage,
   unsavedChangesCountMessage,
@@ -110,16 +106,6 @@ import {
   normalizeMatchIndex,
 } from "../features/search/search-utils";
 import { scrollTextareaOffsetIntoView } from "../features/search/search-navigation";
-
-interface LaunchFile {
-  path: string;
-  dir: string | null;
-}
-
-interface ThemeResult {
-  name: string;
-  css: string;
-}
 
 type ToastKind = "success" | "error";
 type SidebarView = "workspace" | "outline" | "search";
@@ -256,18 +242,21 @@ export function App(): ReactElement {
     });
     if (!path) return;
 
-    const success = await openWorkspaceByPath(path);
-    if (success) {
-      expandWorkspaceTopLevel();
-    } else {
-      showToast(t("toast.openFolderByPath.error"), "error");
+    try {
+      const authorized = await invoke("authorize_workspace", { path });
+      if (!authorized) return;
+      if (await openWorkspaceByPath(authorized)) {
+        expandWorkspaceTopLevel();
+        return;
+      }
+    } catch (error) {
+      console.error("Failed to open workspace:", error);
     }
+    showToast(t("toast.openFolderByPath.error"), "error");
   }, [expandWorkspaceTopLevel, showToast, t]);
 
   const handleOpenFile = useCallback(async (): Promise<void> => {
-    const selected = await open({
-      multiple: false,
-      directory: false,
+    const selected = await invoke("dialog_open_file", {
       filters: [
         { name: t("file.dialog.markdown"), extensions: ["md", "markdown", "mdown", "mkd"] },
         { name: t("file.dialog.allFiles"), extensions: ["*"] },
@@ -409,7 +398,7 @@ export function App(): ReactElement {
   const openFileRef = useCallback(
     (path: string): void => {
       if (isHomeRelativePath(path)) {
-        homeDir()
+        invoke("home_dir")
           .then((home) => openResolvedPath(resolveHomeRelativePath(home, path)))
           .catch((error) => {
             console.error("Failed to resolve home directory:", error);
@@ -603,12 +592,11 @@ export function App(): ReactElement {
   }, []);
 
   // Ask Save / Discard / Cancel for the dirty paths among `filePaths`. Returns
-  // false if the user cancelled (or a save failed/was itself cancelled), in
-  // which case the close should not proceed.
+  // the final tab paths after any Save As, or null to keep the tabs open.
   const confirmCloseDirtyPaths = useCallback(
-    async (filePaths: string[]): Promise<boolean> => {
+    async (filePaths: string[]): Promise<string[] | null> => {
       const dirtyPaths = filePaths.filter((path) => documentStore.isDirty(path));
-      if (dirtyPaths.length === 0) return true;
+      if (dirtyPaths.length === 0) return filePaths;
 
       const message =
         dirtyPaths.length === 1
@@ -622,33 +610,25 @@ export function App(): ReactElement {
         title: t("dialog.unsavedChanges.title"),
         message,
       });
-      if (choice === "cancel") return false;
+      if (choice === "cancel") return null;
+      if (choice === "discard") return filePaths;
 
-      if (choice === "save") {
-        for (const path of dirtyPaths) {
-          if (!(await saveDocument(path))) return false;
-        }
+      const savedPaths: string[] = [];
+      for (const path of filePaths) {
+        const savedPath = documentStore.isDirty(path) ? await saveDocument(path) : path;
+        if (!savedPath) return null;
+        savedPaths.push(savedPath);
       }
-      return true;
+      return savedPaths.some((path) => documentStore.isDirty(path)) ? null : savedPaths;
     },
     [locale, t],
   );
 
-  const handleTabClose = useCallback(
-    (filePath: string): void => {
-      void (async () => {
-        if (await confirmCloseDirtyPaths([filePath])) closeTabsNow([filePath]);
-      })();
-    },
-    [confirmCloseDirtyPaths, closeTabsNow],
-  );
-
   const handleTabsClose = useCallback(
-    (filePaths: string[]): void => {
+    async (filePaths: string[]): Promise<void> => {
       if (filePaths.length === 0) return;
-      void (async () => {
-        if (await confirmCloseDirtyPaths(filePaths)) closeTabsNow(filePaths);
-      })();
+      const approved = await confirmCloseDirtyPaths(filePaths);
+      if (approved) closeTabsNow(approved);
     },
     [confirmCloseDirtyPaths, closeTabsNow],
   );
@@ -790,7 +770,7 @@ export function App(): ReactElement {
     openFileFromTree(filePath, fileName);
   }, []);
 
-  const buildExportDocument = useCallback(async (): Promise<string | null> => {
+  const buildExportDocument = useCallback(async () => {
     const editor = editorRef.current;
     if (!editor) return null;
 
@@ -803,40 +783,37 @@ export function App(): ReactElement {
     }
 
     const bodyHtml = editor.getHTML();
-    const title = (active.split(/[/\\]/).pop() || "document").replace(/\.md$/i, "");
+    const title = (active.split(/[/\\]/).pop() || "document").replace(
+      /\.(md|markdown|mdown|mkd)$/i,
+      "",
+    );
     const { buildHtmlDocument, renderMermaidBlocksInHtml } =
       await import("../features/export/export-document");
-    return buildHtmlDocument(await renderMermaidBlocksInHtml(bodyHtml), title);
+    return {
+      html: await buildHtmlDocument(await renderMermaidBlocksInHtml(bodyHtml), title),
+      title,
+    };
   }, [applyMarkdownToRichText]);
 
   const handleExport = useCallback(
     async (format: "html" | "pdf"): Promise<void> => {
-      const doc = await buildExportDocument();
-      if (!doc) return;
-
-      if (format === "html") {
-        await invoke("export_html", { html: doc });
-        return;
-      }
-
-      let handledNatively = false;
       try {
-        handledNatively = await invoke<boolean>("export_pdf", { html: doc });
-      } catch {
-        handledNatively = false;
-      }
-
-      if (!handledNatively) {
-        const { printHtmlDocument } = await import("../features/export/export-document");
-        printHtmlDocument(doc);
+        const doc = await buildExportDocument();
+        if (doc) await invoke(format === "html" ? "export_html" : "export_pdf", doc);
+      } catch (error) {
+        console.error("Failed to export document:", error);
+        showToast(
+          t(format === "html" ? "toast.htmlExportFailed" : "toast.pdfExportFailed"),
+          "error",
+        );
       }
     },
-    [buildExportDocument],
+    [buildExportDocument, showToast, t],
   );
 
   const importCustomTheme = useCallback(async (): Promise<void> => {
     try {
-      const result = await invoke<ThemeResult | null>("load_custom_theme");
+      const result = await invoke("load_custom_theme");
       if (!result) return;
       applyTheme(`custom:${result.name}`, result.css);
       showToast(t("toast.themeImported"), "success");
@@ -876,7 +853,7 @@ export function App(): ReactElement {
     applyTheme(savedTheme);
     if (savedTheme.startsWith("custom:")) {
       const fileName = savedTheme.slice(7);
-      invoke<string | null>("load_theme_css", { fileName }).then((css) => {
+      invoke("load_theme_css", { fileName }).then((css) => {
         if (css) applyTheme(savedTheme, css);
       });
     }
@@ -964,86 +941,23 @@ export function App(): ReactElement {
 
   useEffect(() => {
     const cleanupShortcuts = setupKeyboardShortcuts();
-    let cleanupWorkspace: (() => void) | null = null;
-    let cancelled = false;
-
-    setupWorkspaceListeners().then((cleanup) => {
-      if (cancelled) {
-        cleanup();
-      } else {
-        cleanupWorkspace = cleanup;
-      }
-    });
-
+    const cleanupWorkspace = setupWorkspaceListeners();
     return () => {
-      cancelled = true;
       cleanupShortcuts();
-      cleanupWorkspace?.();
+      cleanupWorkspace();
     };
   }, []);
 
-  useEffect(() => {
-    const appWindow = getCurrentWindow();
-    let disposed = false;
-    let unlisten: UnlistenFn | null = null;
-    let allowClose = false;
-
-    appWindow
-      .onCloseRequested(async (event) => {
-        if (allowClose) return;
-
-        try {
-          const dirtyPaths = documentStore
-            .getAllDocuments()
-            .filter((doc) => documentStore.isDirty(doc.filePath))
-            .map((doc) => doc.filePath);
-          if (dirtyPaths.length === 0) return;
-
-          event.preventDefault();
-
-          const currentLocale = languageStore.getLocale();
-          const message =
-            dirtyPaths.length === 1
-              ? unsavedChangesMessage(
-                  documentStore.getDocument(dirtyPaths[0])?.fileName ?? dirtyPaths[0],
-                  currentLocale,
-                )
-              : unsavedChangesCountMessage(dirtyPaths.length, currentLocale);
-          const choice = await confirmUnsavedChanges({
-            title: translateStatic("dialog.unsavedChanges.title"),
-            message,
-          });
-          if (choice === "cancel") return;
-
-          if (choice === "save") {
-            for (const path of dirtyPaths) {
-              if (!(await saveDocument(path))) return;
-            }
-          }
-
-          allowClose = true;
-          await appWindow.close();
-        } catch (error) {
-          // Never let an unexpected error here leave the window stuck open —
-          // fall back to closing rather than blocking the user from quitting.
-          console.error("onCloseRequested handler failed, closing anyway", error);
-          allowClose = true;
-          await appWindow.destroy();
-        }
-      })
-      .then((cleanup) => {
-        if (disposed) {
-          cleanup();
-        } else {
-          unlisten = cleanup;
-        }
-      });
-
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
-  }, []);
+  useEffect(
+    () =>
+      setupWindowClose(
+        async () =>
+          (await confirmCloseDirtyPaths(
+            documentStore.getAllDocuments().map((doc) => doc.filePath),
+          )) !== null,
+      ),
+    [confirmCloseDirtyPaths],
+  );
 
   useEffect(() => {
     const sync = (active: boolean) => {
@@ -1064,61 +978,50 @@ export function App(): ReactElement {
   }, []);
 
   useEffect(() => {
-    const unlistens: UnlistenFn[] = [];
-    let cancelled = false;
-    const register = async <T,>(event: string, handler: (payload: T) => void) => {
-      const unlisten = await listen<T>(event, (e) => handler(e.payload));
-      if (cancelled) {
-        unlisten();
-      } else {
-        unlistens.push(unlisten);
-      }
-    };
-
-    void register("menu-open-folder", () => appActionsRef.current.handleOpenFolder());
-    void register("menu-open-folder-path", () => appActionsRef.current.handleOpenFolderByPath());
-    void register("menu-open", () => appActionsRef.current.handleOpenFile());
-    void register("menu-new", () => newUntitledFile());
-    void register("menu-save", () => appActionsRef.current.saveActiveDocument());
-    void register("menu-save-as", () => appActionsRef.current.saveActiveDocumentAs());
-    void register("menu-find", () => appActionsRef.current.openDocumentFind());
-    void register("menu-find-workspace", () => appActionsRef.current.openWorkspaceSearch());
-    void register("menu-export-html", () => appActionsRef.current.handleExport("html"));
-    void register("menu-export-pdf", () => appActionsRef.current.handleExport("pdf"));
-    void register("menu-import-theme", () => appActionsRef.current.importCustomTheme());
-    void register("view-toggle-hidden-files", () => {
-      void toggleShowHiddenFiles();
-    });
-    void register("pdf-export-done", () =>
-      appActionsRef.current.showToast(translateStatic("toast.pdfExported"), "success"),
-    );
-    void register("pdf-export-error", () =>
-      appActionsRef.current.showToast(translateStatic("toast.pdfExportFailed"), "error"),
-    );
-    void register<string>("agent-activity", (state) => {
-      if (state === "active" || state === "cooldown" || state === "idle") {
-        setAgentState(state);
-      }
-    });
-    void register<string>("set-theme", (themeName) => {
-      if (themeName.startsWith("custom:")) {
-        const fileName = themeName.slice(7);
-        invoke<string | null>("load_theme_css", { fileName }).then((css) => {
-          if (css) applyTheme(themeName, css);
-        });
-      } else {
-        applyTheme(themeName);
-      }
-    });
-    void register<string>("set-custom-css", (css) => {
-      const themeName = loadSavedTheme();
-      if (themeName.startsWith("custom:")) applyTheme(themeName, css);
-    });
-
-    return () => {
-      cancelled = true;
-      for (const unlisten of unlistens) unlisten();
-    };
+    const unlistens = [
+      window.amark.on("menu-open-folder", () => appActionsRef.current.handleOpenFolder()),
+      window.amark.on("menu-open-folder-path", () =>
+        appActionsRef.current.handleOpenFolderByPath(),
+      ),
+      window.amark.on("menu-open", () => appActionsRef.current.handleOpenFile()),
+      window.amark.on("menu-new", () => newUntitledFile()),
+      window.amark.on("menu-save", () => appActionsRef.current.saveActiveDocument()),
+      window.amark.on("menu-save-as", () => appActionsRef.current.saveActiveDocumentAs()),
+      window.amark.on("menu-find", () => appActionsRef.current.openDocumentFind()),
+      window.amark.on("menu-find-workspace", () => appActionsRef.current.openWorkspaceSearch()),
+      window.amark.on("menu-export-html", () => appActionsRef.current.handleExport("html")),
+      window.amark.on("menu-export-pdf", () => appActionsRef.current.handleExport("pdf")),
+      window.amark.on("menu-import-theme", () => appActionsRef.current.importCustomTheme()),
+      window.amark.on("view-toggle-hidden-files", () => {
+        void toggleShowHiddenFiles();
+      }),
+      window.amark.on("pdf-export-done", () =>
+        appActionsRef.current.showToast(translateStatic("toast.pdfExported"), "success"),
+      ),
+      window.amark.on("pdf-export-error", () =>
+        appActionsRef.current.showToast(translateStatic("toast.pdfExportFailed"), "error"),
+      ),
+      window.amark.on("agent-activity", (state) => {
+        if (state === "active" || state === "cooldown" || state === "idle") {
+          setAgentState(state);
+        }
+      }),
+      window.amark.on("set-theme", (themeName) => {
+        if (themeName.startsWith("custom:")) {
+          const fileName = themeName.slice(7);
+          invoke("load_theme_css", { fileName }).then((css) => {
+            if (css) applyTheme(themeName, css);
+          });
+        } else {
+          applyTheme(themeName);
+        }
+      }),
+      window.amark.on("set-custom-css", (css) => {
+        const themeName = loadSavedTheme();
+        if (themeName.startsWith("custom:")) applyTheme(themeName, css);
+      }),
+    ];
+    return () => unlistens.forEach((unsubscribe) => unsubscribe());
   }, []);
 
   useEffect(() => {
@@ -1296,10 +1199,8 @@ export function App(): ReactElement {
 
   return (
     <div className="app-container">
-      <div className="workspace-header" data-tauri-drag-region>
-        <span className="workspace-name" data-tauri-drag-region>
-          AMark
-        </span>
+      <div className="workspace-header">
+        <span className="workspace-name">AMark</span>
         <MenuBar />
         <span className="workspace-actions-left">
           <Button
@@ -1419,7 +1320,7 @@ export function App(): ReactElement {
           <div className="tabs-bar-container">
             <TabsBar
               onTabClick={handleTabClick}
-              onTabClose={handleTabClose}
+              onTabClose={(path) => void handleTabsClose([path])}
               onTabsClose={handleTabsClose}
               onNewFile={() => newUntitledFile()}
             />
@@ -1498,7 +1399,7 @@ export function App(): ReactElement {
 
 async function openLaunchFiles(expandWorkspaceTopLevel: () => void): Promise<void> {
   try {
-    const files = await invoke<LaunchFile[]>("take_launch_files");
+    const files = await invoke("take_launch_files");
     if (files.length === 0) return;
 
     const workspaceDir = files[0]?.dir ?? null;

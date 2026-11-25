@@ -57,7 +57,14 @@
 /* ── Custom Title Bar / Window Controls ───────────────────────────────────── */
 
 .workspace-header {
+  -webkit-app-region: drag;
   user-select: none;
+}
+
+.workspace-header .menu-bar,
+.workspace-header .workspace-actions-left,
+.workspace-header .workspace-actions {
+  -webkit-app-region: no-drag;
 }
 
 .workspace-actions-left {

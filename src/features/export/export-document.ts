@@ -1,7 +1,7 @@
 // export-document.ts - Editor-agnostic document export helpers.
 //
 // Turns rendered editor HTML into a standalone, self-styled HTML document and
-// drives browser-based PDF export via the print dialog. This module must not
+// prepares the same content for the native PDF exporter. This module must not
 // import any editor-specific code; callers pass in the already-rendered HTML
 // body (e.g. from EditorAdapter.getHTML()).
 
@@ -24,13 +24,18 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-async function loadFontDataUrl(url: URL): Promise<string> {
-  const response = await fetch(url.href);
+async function loadAssetDataUrl(url: string, mimeType?: string): Promise<string> {
+  const response = await fetch(url);
   if (!response.ok) {
-    throw new Error("Failed to load export font (" + response.status + "): " + url.href);
+    throw new Error("Failed to load export asset (" + response.status + "): " + url);
   }
   const bytes = new Uint8Array(await response.arrayBuffer());
-  return "data:" + fontMimeType(url) + ";base64," + bytesToBase64(bytes);
+  return (
+    "data:" +
+    (mimeType ?? response.headers.get("Content-Type") ?? "application/octet-stream") +
+    ";base64," +
+    bytesToBase64(bytes)
+  );
 }
 
 async function inlineFontAssets(
@@ -53,7 +58,7 @@ async function inlineFontAssets(
 
       let dataUrl = cache.get(url.href);
       if (!dataUrl) {
-        dataUrl = loadFontDataUrl(url);
+        dataUrl = loadAssetDataUrl(url.href, fontMimeType(url));
         cache.set(url.href, dataUrl);
       }
       return {
@@ -144,6 +149,32 @@ export async function renderMermaidBlocksInHtml(html: string): Promise<string> {
   return replaced ? doc.body.innerHTML : html;
 }
 
+/** Per-window image URLs expire when AMark closes. Keep exported documents portable. */
+async function embedWorkspaceImages(bodyHtml: string): Promise<string> {
+  if (!bodyHtml.includes("amark-asset:")) return bodyHtml;
+  const template = document.createElement("template");
+  template.innerHTML = bodyHtml;
+  const images = template.content.querySelectorAll<HTMLImageElement>('img[src^="amark-asset:"]');
+  const dataUrls = new Map<string, Promise<string>>();
+  await Promise.all(
+    Array.from(images, async (image) => {
+      const url = image.getAttribute("src")!;
+      let dataUrl = dataUrls.get(url);
+      if (!dataUrl) {
+        dataUrl = loadAssetDataUrl(url);
+        dataUrls.set(url, dataUrl);
+      }
+      try {
+        image.src = await dataUrl;
+      } catch {
+        // Preserve the alt text for missing or unreadable images.
+        image.removeAttribute("src");
+      }
+    }),
+  );
+  return template.innerHTML;
+}
+
 /**
  * Build a complete, self-contained HTML document from rendered editor HTML.
  * The result mirrors the in-app appearance: it carries the active theme class,
@@ -152,70 +183,25 @@ export async function renderMermaidBlocksInHtml(html: string): Promise<string> {
  */
 export async function buildHtmlDocument(bodyHtml: string, title: string): Promise<string> {
   const themeClass = document.body.className;
-  const styles = await collectAppStyles();
+  const [styles, portableBody] = await Promise.all([
+    collectAppStyles(),
+    embedWorkspaceImages(bodyHtml),
+  ]);
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="script-src 'none'; object-src 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
 <style>${styles}</style>
 <style>${EXPORT_OVERRIDES}</style>
 </head>
 <body class="${escapeHtml(themeClass)}">
-<div id="editor"><div class="ProseMirror">${bodyHtml}</div></div>
+<div id="editor"><div class="ProseMirror">${portableBody}</div></div>
 </body>
 </html>`;
-}
-
-/**
- * Open a fully-formed HTML document in an offscreen iframe and trigger the
- * browser print dialog (where the user can choose "Save as PDF"). The iframe is
- * removed once printing is dismissed.
- */
-export function printHtmlDocument(htmlDoc: string): void {
-  const iframe = document.createElement("iframe");
-  iframe.setAttribute("aria-hidden", "true");
-  iframe.style.position = "fixed";
-  iframe.style.right = "0";
-  iframe.style.bottom = "0";
-  iframe.style.width = "0";
-  iframe.style.height = "0";
-  iframe.style.border = "0";
-
-  const cleanup = () => {
-    // Defer removal so the print dialog has fully detached from the frame.
-    window.setTimeout(() => iframe.remove(), 0);
-  };
-
-  iframe.addEventListener("load", async () => {
-    const frameWindow = iframe.contentWindow;
-    if (!frameWindow) {
-      cleanup();
-      return;
-    }
-    try {
-      await frameWindow.document.fonts?.ready;
-    } catch {
-      // Printing is still preferable to silently doing nothing if a browser
-      // does not implement the CSS Font Loading API correctly.
-    }
-    frameWindow.addEventListener("afterprint", cleanup, { once: true });
-    frameWindow.focus();
-    frameWindow.print();
-  });
-
-  document.body.appendChild(iframe);
-
-  const doc = iframe.contentDocument;
-  if (!doc) {
-    iframe.remove();
-    return;
-  }
-  doc.open();
-  doc.write(htmlDoc);
-  doc.close();
 }
 
 function escapeHtml(value: string): string {

@@ -43,4 +43,22 @@ describe("buildHtmlDocument", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(html).toContain("/assets/cover.png");
   });
+
+  it("embeds local images once without fetching remote images", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(new Uint8Array([0, 1, 2, 255]), { headers: { "Content-Type": "image/png" } }),
+      );
+    const local = "amark-asset://window/figure.png";
+    const html = await buildHtmlDocument(
+      `<img src="${local}"><img src="${local}"><img src="https://example.com/elsewhere.png">`,
+      "Figures",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(local);
+    expect(html.match(/data:image\/png;base64,AAEC\/w==/g)).toHaveLength(2);
+    expect(html).toContain("https://example.com/elsewhere.png");
+    expect(html).not.toContain("amark-asset:");
+  });
 });

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="src-tauri/icons/128x128.png" alt="AMark" width="90" />
+<img src="resources/icons/128x128.png" alt="AMark" width="90" />
 
 # AMark
 
@@ -70,18 +70,18 @@ AMark 正在试图打造那个像样的阅读器：
 
 从 [Releases](../../releases) 页面下载对应平台的安装包：
 
-| 平台    | 安装包          |
-| ------- | --------------- |
-| Windows | `.msi` / `.exe` |
-| macOS   | `.dmg`          |
-| Linux   | `.deb`          |
+| 平台    | 安装包 |
+| ------- | ------ |
+| Windows | `.exe` |
+| macOS   | `.dmg` |
+| Linux   | `.deb` |
 
 装好之后，用 AMark 打开你的项目目录——比如 Claude Code 正在工作的仓库，或它的 memory 目录——然后回到终端，让 agent 继续干活。
 
 ## 设计原则
 
 - **AI Agent Native**：对 AI Agent 生态变化保持敏感。今天有用的功能，明天可能变成包袱——AMark 会果断纳入新能力，也会果断移除过时的。宁可小而对，不要大而全。
-- **轻量**：AMark 使用 Tauri 构建，在提供跨平台桌面体验的同时，尽可能减少应用体积和运行时资源占用。
+- **轻量**：AMark 使用 Electron 统一桌面端的渲染与 PDF 导出，并在真实工作区跟踪运行时内存占用。
 
 ## 路线图
 
@@ -89,6 +89,10 @@ AMark 正在试图打造那个像样的阅读器：
 - **公式渲染**：支持常见 Markdown 数学公式的渲染。
 - **类 LaTeX 排版预览**：在「仅预览」模式中提供更接近论文与正式文档的对齐等排版效果，让 Markdown 也更适合长文阅读。
 - **更多 AI Agent Native 场景**：仍在探索更适合 Agent 产物阅读、评审与协作的交互方式。如果你在使用 AI Agent 工具时遇到了特别适合的 Markdown 工作流，欢迎提交 issue 分享想法。
+
+## 本地开发
+
+安装 Vite+ 和 Bun 后运行 `vp install`。用 `vp run desktop:dev` 启动带热更新的桌面窗口，`vp run desktop:test` 运行桌面服务测试，`vp run desktop:dist` 在 `release/` 中生成当前平台的安装包。
 
 ## License
 

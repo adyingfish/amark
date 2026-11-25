@@ -9,7 +9,7 @@
 // preserved by remark-math-source keeps the Markdown round-trip exact. When
 // other inline content shares the paragraph, keep the mdast node inline but
 // annotate it for display-mode KaTeX rendering.
-import type { Root } from "mdast";
+import type { Data, Root } from "mdast";
 import type { Plugin } from "unified";
 import { readPreservedMathSource } from "./remark-math-source";
 
@@ -19,7 +19,7 @@ interface SourceNode {
   type?: string;
   value?: string;
   meta?: string | null;
-  data?: Record<string, unknown>;
+  data?: Data & { [DISPLAY_KEY]?: boolean };
   position?: {
     start?: { offset?: number };
     end?: { offset?: number };

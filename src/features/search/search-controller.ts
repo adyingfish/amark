@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@/services/desktop";
 import { documentStore } from "../document/document-store";
 import { getShowHiddenFiles } from "../workspace/workspace-preferences";
 import { isPathWithinRoot } from "../workspace/workspace-utils";
@@ -20,7 +20,7 @@ export async function searchWorkspace(
     )
     .map((document) => ({ path: document.filePath, content: document.markdown }));
 
-  return invoke<WorkspaceSearchResult>("search_workspace", {
+  return invoke("search_workspace", {
     rootPath,
     query,
     caseSensitive,

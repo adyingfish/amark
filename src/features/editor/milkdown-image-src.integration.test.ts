@@ -3,7 +3,7 @@
 // Proves the imageSrcSchema extension actually takes over rendering: a later
 // .use() with the same node name must override commonmark's built-in image
 // schema (schema assembly keeps the last registration), and its toDOM must
-// route local paths through convertFileSrc while leaving node.attrs.src — and
+// route local paths through the desktop asset protocol while leaving node.attrs.src — and
 // therefore markdown serialization — untouched.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,18 +13,14 @@ import { replaceAll } from "@milkdown/kit/utils";
 import { htmlImageSchema, imageSrcSchema } from "./milkdown-image-src";
 import { setImageBaseDirFromFile } from "../../services/image-src";
 
-// convertFileSrc reads window.__TAURI_INTERNALS__ at call time; stub the
-// shape it needs so toDOM can run outside a real Tauri webview.
-type TauriWindow = Window & { __TAURI_INTERNALS__?: unknown };
-
 beforeEach(() => {
-  (window as TauriWindow).__TAURI_INTERNALS__ = {
-    convertFileSrc: (path: string) => `asset://localhost/${encodeURIComponent(path)}`,
-  };
+  vi.stubGlobal("amark", {
+    assetUrl: (path: string) => `amark-asset://test-window/${encodeURIComponent(path)}`,
+  });
 });
 
 afterEach(() => {
-  delete (window as TauriWindow).__TAURI_INTERNALS__;
+  vi.unstubAllGlobals();
   setImageBaseDirFromFile(null);
   vi.restoreAllMocks();
 });
@@ -53,7 +49,7 @@ describe("imageSrcSchema", () => {
 
     const img = container.querySelector("img");
     expect(img?.getAttribute("src")).toBe(
-      `asset://localhost/${encodeURIComponent("/ws/docs/assets/a.png")}`,
+      `amark-asset://test-window/${encodeURIComponent("/ws/docs/assets/a.png")}`,
     );
 
     editor.destroy();
@@ -92,7 +88,7 @@ describe("htmlImageSchema", () => {
 
     const img = container.querySelector('img[data-type="html-img"]');
     expect(img?.getAttribute("src")).toBe(
-      `asset://localhost/${encodeURIComponent("/ws/docs/assets/a.png")}`,
+      `amark-asset://test-window/${encodeURIComponent("/ws/docs/assets/a.png")}`,
     );
     expect(img?.getAttribute("alt")).toBe("pic");
     expect(img?.getAttribute("width")).toBe("200");

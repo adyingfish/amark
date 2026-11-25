@@ -9,7 +9,7 @@ describe("resolveLocalImagePath", () => {
     expect(resolveLocalImagePath("https://example.com/a.png", POSIX_BASE)).toBeNull();
     expect(resolveLocalImagePath("http://example.com/a.png", POSIX_BASE)).toBeNull();
     expect(resolveLocalImagePath("data:image/png;base64,AAAA", POSIX_BASE)).toBeNull();
-    expect(resolveLocalImagePath("asset://localhost/x.png", POSIX_BASE)).toBeNull();
+    expect(resolveLocalImagePath("amark-asset://test-window/x.png", POSIX_BASE)).toBeNull();
   });
 
   it("returns null for an empty src", () => {

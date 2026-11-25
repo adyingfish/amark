@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="src-tauri/icons/128x128.png" alt="AMark" width="90" />
+<img src="resources/icons/128x128.png" alt="AMark" width="90" />
 
 # AMark
 
@@ -71,18 +71,18 @@ AMark is that proper reader:
 
 Download the installer for your platform from the [Releases](../../releases) page:
 
-| Platform | Package         |
-| -------- | --------------- |
-| Windows  | `.msi` / `.exe` |
-| macOS    | `.dmg`          |
-| Linux    | `.deb`          |
+| Platform | Package |
+| -------- | ------- |
+| Windows  | `.exe`  |
+| macOS    | `.dmg`  |
+| Linux    | `.deb`  |
 
 Once installed, open your project directory with AMark — say, the repo Claude Code is working in, or its memory directory — then go back to your terminal and let the agent keep working.
 
 ## Design principles
 
 - **AI Agent Native**: we stay sensitive to how the AI agent ecosystem moves. Today's useful feature can be tomorrow's baggage — AMark adopts new capabilities decisively, and removes outdated ones just as decisively. Small and right beats big and complete.
-- **Lightweight**: AMark is built with Tauri, delivering a cross-platform desktop experience while keeping app size and runtime footprint as small as possible.
+- **Lightweight**: AMark uses Electron for consistent desktop rendering and PDF export. Runtime memory is measured against real workspaces.
 
 ## Roadmap
 
@@ -90,6 +90,10 @@ Once installed, open your project directory with AMark — say, the repo Claude 
 - **Formula rendering**: render common Markdown math formulas.
 - **LaTeX-like typesetting preview**: bring preview-only mode closer to papers and formal documents — justified alignment and similar typesetting — so Markdown works better for long-form reading.
 - **More AI Agent Native scenarios**: we're still exploring interactions better suited to reading, reviewing, and collaborating on agent output. If you've found a Markdown workflow that fits especially well with AI agent tools, open an issue and share it.
+
+## Local development
+
+With Vite+ and Bun installed, run `vp install`. Use `vp run desktop:dev` to launch the desktop app with hot reload, `vp run desktop:test` for desktop service tests, and `vp run desktop:dist` to build the installer for your platform in `release/`.
 
 ## License
 

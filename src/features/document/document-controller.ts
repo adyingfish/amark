@@ -1,6 +1,5 @@
 // document-controller.ts - Document business logic
-import { invoke } from "@tauri-apps/api/core";
-import { save } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@/services/desktop";
 import { documentStore } from "./document-store";
 import { tabsStore } from "../tabs/tabs-store";
 import { workspaceStore } from "../workspace/workspace-store";
@@ -18,9 +17,9 @@ function joinPath(dir: string, name: string): string {
  * Save the document at `filePath`. A never-saved "untitled" buffer is routed
  * through the Save-As dialog so the user can choose where it lands on disk.
  */
-export async function saveDocument(filePath: string): Promise<boolean> {
+export async function saveDocument(filePath: string): Promise<string | null> {
   const document = documentStore.getDocument(filePath);
-  if (!document) return false;
+  if (!document) return null;
 
   if (document.isUntitled) {
     return saveDocumentAs(filePath);
@@ -32,13 +31,14 @@ export async function saveDocument(filePath: string): Promise<boolean> {
       path: filePath,
       content: document.markdown,
     });
-    documentStore.markSaved(filePath);
-    tabsStore.updateTabDirtyState(filePath, false);
-    return true;
+    documentStore.markSaved(filePath, document.markdown);
+    const dirty = documentStore.isDirty(filePath);
+    tabsStore.updateTabDirtyState(filePath, dirty);
+    return dirty ? null : filePath;
   } catch (error) {
     console.error("Failed to save file:", error);
     documentStore.markError(filePath);
-    return false;
+    return null;
   }
 }
 
@@ -48,18 +48,18 @@ export async function saveDocument(filePath: string): Promise<boolean> {
  * buffers. On success the document/tab are re-keyed to the chosen path and
  * the workspace tree refreshes to reveal the new file.
  */
-export async function saveDocumentAs(filePath: string): Promise<boolean> {
+export async function saveDocumentAs(filePath: string): Promise<string | null> {
   const document = documentStore.getDocument(filePath);
-  if (!document) return false;
+  if (!document) return null;
 
   const rootPath = workspaceStore.getRootPath();
   const defaultPath = rootPath ? joinPath(rootPath, document.fileName) : document.fileName;
 
-  const chosen = await save({
+  const chosen = await invoke("dialog_save_file", {
     defaultPath,
     filters: [{ name: "Markdown", extensions: MARKDOWN_EXTENSIONS }],
   });
-  if (typeof chosen !== "string") return false;
+  if (typeof chosen !== "string") return null;
 
   const savedToSamePath = !document.isUntitled && chosen === filePath;
 
@@ -71,23 +71,23 @@ export async function saveDocumentAs(filePath: string): Promise<boolean> {
     await invoke("save_file_v2", { path: chosen, content: document.markdown });
 
     if (savedToSamePath) {
-      documentStore.markSaved(filePath);
-      tabsStore.updateTabDirtyState(filePath, false);
+      documentStore.markSaved(filePath, document.markdown);
     } else {
       const newName = chosen.split(/[/\\]/).pop() ?? document.fileName;
-      documentStore.adoptPath(filePath, chosen);
+      documentStore.adoptPath(filePath, chosen, document.markdown);
       tabsStore.renameTab(filePath, chosen, newName);
       if (workspaceStore.getActiveFilePath() === filePath) {
         workspaceStore.setActiveFilePath(chosen);
       }
     }
 
+    tabsStore.updateTabDirtyState(chosen, documentStore.isDirty(chosen));
     await refreshWorkspace();
-    return true;
+    return documentStore.isDirty(chosen) ? null : chosen;
   } catch (error) {
     console.error("Failed to save file:", error);
     documentStore.markError(filePath);
-    return false;
+    return null;
   }
 }
 
@@ -98,7 +98,7 @@ export async function saveDocumentAs(filePath: string): Promise<boolean> {
 export async function saveActiveDocument(): Promise<boolean> {
   const activePath = workspaceStore.getActiveFilePath();
   if (!activePath) return false;
-  return saveDocument(activePath);
+  return (await saveDocument(activePath)) !== null;
 }
 
 /**
@@ -108,12 +108,12 @@ export async function saveActiveDocument(): Promise<boolean> {
 export async function saveActiveDocumentAs(): Promise<boolean> {
   const activePath = workspaceStore.getActiveFilePath();
   if (!activePath) return false;
-  return saveDocumentAs(activePath);
+  return (await saveDocumentAs(activePath)) !== null;
 }
 
 export async function reloadDocumentFromDisk(filePath: string): Promise<boolean> {
   try {
-    const result = await invoke<{ path: string; content: string }>("read_file", {
+    const result = await invoke("read_file", {
       path: filePath,
     });
 

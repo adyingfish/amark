@@ -1,5 +1,4 @@
-import type { UnlistenFn } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@/services/desktop";
 import { Copy as CopyIcon, Minus, Square, X } from "lucide-react";
 import { type ReactElement, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -9,28 +8,20 @@ import type { AgentState } from "../app-utils";
 export function WindowControls({ agentState }: { agentState: AgentState }): ReactElement {
   const { t } = useI18n();
   const [maximized, setMaximized] = useState(false);
-  const appWindow = getCurrentWindow();
 
   useEffect(() => {
-    let unlisten: UnlistenFn | null = null;
     let disposed = false;
     const sync = async () => {
-      const isMaximized = await appWindow.isMaximized();
+      const isMaximized = await invoke("window_is_maximized");
       if (!disposed) setMaximized(isMaximized);
     };
 
     void sync();
-    appWindow.onResized(sync).then((cleanup) => {
-      if (disposed) {
-        cleanup();
-      } else {
-        unlisten = cleanup;
-      }
-    });
+    const unlisten = window.amark.on("window-resized", sync);
 
     return () => {
       disposed = true;
-      unlisten?.();
+      unlisten();
     };
   }, []);
 
@@ -48,7 +39,7 @@ export function WindowControls({ agentState }: { agentState: AgentState }): Reac
         className="window-control window-control-minimize"
         title={t("window.minimize")}
         aria-label={t("window.minimize")}
-        onClick={() => void appWindow.minimize()}
+        onClick={() => void invoke("window_minimize")}
       >
         <Minus className="lucide-icon" size={14} aria-hidden="true" />
       </button>
@@ -57,7 +48,7 @@ export function WindowControls({ agentState }: { agentState: AgentState }): Reac
         className="window-control window-control-maximize"
         title={maximizeTitle}
         aria-label={maximizeTitle}
-        onClick={() => void appWindow.toggleMaximize()}
+        onClick={() => void invoke("window_toggle_maximize")}
       >
         {maximized ? (
           <CopyIcon className="lucide-icon" size={14} aria-hidden="true" />
@@ -70,7 +61,7 @@ export function WindowControls({ agentState }: { agentState: AgentState }): Reac
         className="window-control window-control-close"
         title={t("window.close")}
         aria-label={t("window.close")}
-        onClick={() => void appWindow.close()}
+        onClick={() => void invoke("window_request_close")}
       >
         <X className="lucide-icon" size={14} aria-hidden="true" />
       </button>

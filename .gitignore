@@ -6,9 +6,10 @@ dist/
 dist-ssr/
 *.local
 
-# Tauri
+# Legacy local builds and memory comparison baseline
 src-tauri/target/
 src-tauri/gen/
+release/
 
 # IDE
 .vscode/
