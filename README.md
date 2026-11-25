@@ -81,7 +81,7 @@ AMark 正在试图打造那个像样的阅读器：
 ## 设计原则
 
 - **AI Agent Native**：对 AI Agent 生态变化保持敏感。今天有用的功能，明天可能变成包袱——AMark 会果断纳入新能力，也会果断移除过时的。宁可小而对，不要大而全。
-- **轻量**：AMark 使用 Electron 统一桌面端的渲染与 PDF 导出，并在真实工作区跟踪运行时内存占用。
+- **轻量**：AMark 使用 Electron 统一桌面端的渲染与 PDF 导出，并在真实工作区跟踪运行时内存占用。[Windows 一小时内存对照](benchmarks/results/windows-2026-11-26/README.md)
 
 ## 路线图
 

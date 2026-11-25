@@ -82,7 +82,7 @@ Once installed, open your project directory with AMark — say, the repo Claude 
 ## Design principles
 
 - **AI Agent Native**: we stay sensitive to how the AI agent ecosystem moves. Today's useful feature can be tomorrow's baggage — AMark adopts new capabilities decisively, and removes outdated ones just as decisively. Small and right beats big and complete.
-- **Lightweight**: AMark uses Electron for consistent desktop rendering and PDF export. Runtime memory is measured against real workspaces.
+- **Lightweight**: AMark uses Electron for consistent desktop rendering and PDF export. Runtime memory is measured against real workspaces. [One-hour Windows benchmark](benchmarks/results/windows-2026-11-26/README.md)
 
 ## Roadmap
 

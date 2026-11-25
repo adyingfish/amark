@@ -1,0 +1,16 @@
+{
+  "startedUtc": "2026-11-25T18:49:22.5026776+00:00",
+  "system": "Microsoft Windows NT 10.0.26300.0",
+  "minutes": 60,
+  "intervalSeconds": 30,
+  "tauriUserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/158.0.0.0 Safari/537.36 Edg/158.0.0.0",
+  "electronUserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) amark/0.2.0 Chrome/156.0.8078.109 Electron/45.5.0 Safari/537.36",
+  "asarSha256": "70735BA207245F54282FDD1EE0172F888DD46A3FC42DAC6997F8F60A6F5D9BA4",
+  "durationSeconds": 3600.7,
+  "originals": 54,
+  "sourceBytes": 122250.0,
+  "revisions": 237,
+  "sharedWorkspace": true,
+  "tauriSha256": "94F2B54AE52B89241A484BF05CA82AC26BEEB9B6E65A58158F3B246B11168996",
+  "electronSha256": "2A287FEBE79157F5A26DF7EA406AAF1D46ADE626E6BFD33A5A89D8AD749F2F5F"
+}
