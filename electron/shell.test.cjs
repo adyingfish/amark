@@ -4,8 +4,13 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 const { pathToFileURL } = require("node:url");
-const { isAppPage, launchFilePath, registerProtocols, rendererURL } = require("./protocols.cjs");
-const { readWebKit, readWindowStates, restoreBounds } = require("./preferences.cjs");
+const {
+  isAppPage,
+  launchFilePath,
+  registerProtocols,
+  rendererURL,
+} = require("../dist-electron/protocols.js");
+const { readWebKit, readWindowStates, restoreBounds } = require("../dist-electron/preferences.js");
 
 test("file associations accept percent-escaped file URIs and relative command-line paths", () => {
   const file = path.join(os.tmpdir(), "本地 示例.md");

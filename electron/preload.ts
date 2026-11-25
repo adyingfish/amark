@@ -1,4 +1,5 @@
-const { contextBridge, ipcRenderer } = require("electron");
+import type { DesktopBridge } from "../shared/desktop";
+import { contextBridge, ipcRenderer } from "electron";
 
 // Sandboxed preloads cannot load local modules. Every command is dispatched
 // through an explicit handler in the main process. Never expose ipcRenderer.
@@ -17,15 +18,21 @@ if (process.isMainFrame && token) {
       if (Object.keys(legacy).length) localStorage.setItem("amark-imported-preferences", "true");
     }
   } catch (error) {
-    console.warn("Could not restore previous AMark preferences", error.message);
+    console.warn(
+      "Could not restore previous AMark preferences",
+      error instanceof Error ? error.message : String(error),
+    );
   }
   contextBridge.exposeInMainWorld("amark", {
-    invoke(name, args = {}) {
-      return ipcRenderer.invoke("amark:command", name, args);
+    invoke(name, ...args) {
+      return ipcRenderer.invoke("amark:command", name, args[0] ?? {});
     },
     on(name, callback) {
       const channel = "amark:event:" + name;
-      const listener = (_event, payload) => callback(payload);
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        payload: Parameters<typeof callback>[0],
+      ) => callback(payload);
       ipcRenderer.on(channel, listener);
       if (name === "window-close-requested") ipcRenderer.send("amark:close-listener", true);
       return () => {
@@ -38,5 +45,5 @@ if (process.isMainFrame && token) {
     assetUrl(file) {
       return "amark-asset://" + token + "/" + encodeURIComponent(file);
     },
-  });
+  } satisfies DesktopBridge);
 }

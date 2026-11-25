@@ -1,6 +1,13 @@
-const fs = require("node:fs");
-const fsp = require("node:fs/promises");
-const path = require("node:path");
+import type { BrowserWindow } from "electron";
+
+type Geometry = Electron.Rectangle & { maximized?: boolean; fullscreen?: boolean };
+type Settings = Record<string, string>;
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+import * as fs from "node:fs";
+import * as fsp from "node:fs/promises";
+import * as path from "node:path";
 
 const identifier = "ai.marswave.amark";
 const keys = [
@@ -13,42 +20,49 @@ const keys = [
   "amark-show-hidden-files",
 ];
 
-function jsonFile(file) {
+function jsonFile(file: string): unknown {
   try {
     return JSON.parse(fs.readFileSync(file, "utf8"));
   } catch {
     return null;
   }
 }
-function validRect(rect) {
+function validRect(rect: unknown): rect is Geometry {
   return (
-    rect &&
-    ["x", "y", "width", "height"].every(
-      (key) => Number.isInteger(rect[key]) && Math.abs(rect[key]) < 0x7fffffff,
+    record(rect) &&
+    [rect.x, rect.y, rect.width, rect.height].every(
+      (value) =>
+        typeof value === "number" && Number.isInteger(value) && Math.abs(value) < 0x7fffffff,
     ) &&
-    rect.width > 0 &&
-    rect.height > 0
+    Number(rect.width) > 0 &&
+    Number(rect.height) > 0
   );
 }
-function readWindowStates(app, toDip = (rect) => rect) {
+function readWindowStates(
+  app: Electron.App,
+  toDip: (rect: Electron.Rectangle) => Electron.Rectangle = (rect) => rect,
+): Record<string, Geometry> {
+  const states: Record<string, Geometry> = {};
   const saved = jsonFile(path.join(app.getPath("userData"), "windows.json"));
-  if (saved && typeof saved === "object" && !Array.isArray(saved)) return saved;
-  if (app.commandLine.hasSwitch("user-data-dir")) return {};
-  const old = jsonFile(path.join(app.getPath("appData"), identifier, ".window-state.json")) ?? {};
-  return Object.fromEntries(
-    Object.entries(old)
-      .filter(([key, rect]) => /^main(?:-\d+)?$/.test(key) && validRect(rect))
-      .map(([key, rect]) => [
-        key.split("-")[1] ?? "1",
-        {
+  if (record(saved)) {
+    for (const [key, rect] of Object.entries(saved)) if (validRect(rect)) states[key] = rect;
+    return states;
+  }
+  if (app.commandLine.hasSwitch("user-data-dir")) return states;
+  const old = jsonFile(path.join(app.getPath("appData"), identifier, ".window-state.json"));
+  if (record(old))
+    for (const [key, rect] of Object.entries(old)) {
+      if (/^main(?:-\d+)?$/.test(key) && validRect(rect)) {
+        states[key.split("-")[1] ?? "1"] = {
           ...toDip(rect),
           maximized: rect.maximized === true,
           fullscreen: rect.fullscreen === true,
-        },
-      ]),
-  );
+        };
+      }
+    }
+  return states;
 }
-function restoreBounds(saved, displays) {
+function restoreBounds(saved: Geometry | undefined, displays: Electron.Display[]) {
   const fallback = { width: 960, height: 720 };
   if (!validRect(saved)) return fallback;
   const { x, y, width, height } = saved;
@@ -68,7 +82,12 @@ function restoreBounds(saved, displays) {
   );
   return visible ? { x, y, width, height } : fallback;
 }
-function saveWindowState(app, states, label, win) {
+function saveWindowState(
+  app: Electron.App,
+  states: Record<string, Geometry>,
+  label: number,
+  win: BrowserWindow,
+) {
   states[label] = {
     ...win.getNormalBounds(),
     maximized: win.isMaximized(),
@@ -79,14 +98,17 @@ function saveWindowState(app, states, label, win) {
     fs.writeFileSync(target + ".tmp", JSON.stringify(states));
     fs.renameSync(target + ".tmp", target);
   } catch (error) {
-    console.warn("Could not persist window state", error.message);
+    console.warn(
+      "Could not persist window state",
+      error instanceof Error ? error.message : String(error),
+    );
   }
 }
 
 // Chromium itself decodes WebView2's LevelDB (including deleted/overwritten
 // values). Work exclusively on a copy of the application's local storage.
-async function readWebView2(app, source) {
-  const { BrowserWindow, session } = require("electron");
+async function readWebView2(app: Electron.App, source: string): Promise<Settings> {
+  const { BrowserWindow, session } = await import("electron");
   const staging = path.join(app.getPath("userData"), "legacy-preferences-import");
   const copied = path.join(staging, "Local Storage", "leveldb");
   await fsp.mkdir(copied, { recursive: true });
@@ -128,14 +150,14 @@ async function readWebView2(app, source) {
   }
 }
 
-async function readWebKit(directory) {
+async function readWebKit(directory: string): Promise<Settings> {
   // WebKitGTK and WKWebView store origin data in SQLite. Both hashed origin
   // directories and the older tauri_localhost_0.localstorage layout exist.
   let entries;
   try {
     entries = await fsp.readdir(directory, { withFileTypes: true });
   } catch (error) {
-    if (error.code === "ENOENT") return {};
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
     throw error;
   }
   for (const entry of entries) {
@@ -148,11 +170,11 @@ async function readWebKit(directory) {
       (/tauri.*localhost.*\.localstorage$/i.test(entry.name) ||
         entry.name.toLowerCase() === "localstorage.sqlite3")
     ) {
-      const { DatabaseSync } = require("node:sqlite");
+      const { DatabaseSync } = await import("node:sqlite");
       const db = new DatabaseSync(file, { readOnly: true });
       try {
         const query = db.prepare("SELECT value FROM ItemTable WHERE key = ?");
-        const settings = {};
+        const settings: Settings = {};
         for (const key of keys) {
           const value = query.get(key)?.value;
           if (typeof value === "string") settings[key] = value;
@@ -168,7 +190,7 @@ async function readWebKit(directory) {
   return {};
 }
 
-async function loadLegacyPreferences(app) {
+async function loadLegacyPreferences(app: Electron.App): Promise<Settings> {
   if (app.commandLine.hasSwitch("user-data-dir")) return {};
   const userData = app.getPath("userData");
   const file = path.join(userData, "legacy-preferences.json");
@@ -202,23 +224,21 @@ async function loadLegacyPreferences(app) {
     await fsp.writeFile(file, JSON.stringify(settings), { flag: "wx" });
     return settings;
   } catch (error) {
-    console.warn("Could not import previous AMark preferences:", error.message);
+    console.warn(
+      "Could not import previous AMark preferences:",
+      error instanceof Error ? error.message : String(error),
+    );
     return {};
   }
 }
 
-function knownSettings(settings) {
+function knownSettings(settings: unknown): Settings {
+  if (!record(settings)) return {};
   return Object.fromEntries(
     keys
       .filter((key) => typeof settings[key] === "string" && settings[key].length <= 512)
-      .map((key) => [key, settings[key]]),
+      .map((key) => [key, String(settings[key])]),
   );
 }
 
-module.exports = {
-  readWindowStates,
-  restoreBounds,
-  saveWindowState,
-  loadLegacyPreferences,
-  readWebKit,
-};
+export { readWindowStates, restoreBounds, saveWindowState, loadLegacyPreferences, readWebKit };

@@ -1,36 +1,37 @@
-const fs = require("node:fs/promises");
-const path = require("node:path");
+import type { WorkspaceFileNode } from "../shared/desktop";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 
 const generated = new Set(["node_modules", "target", "dist", "build"]);
 const markdownExtensions = new Set([".md", ".markdown", ".mdown", ".mkd"]);
 
-function isMarkdown(file) {
+function isMarkdown(file: string) {
   return markdownExtensions.has(path.extname(file).toLowerCase());
 }
 
-function skipEntry(name, showHidden) {
+function skipEntry(name: string, showHidden: boolean) {
   return generated.has(name) || (!showHidden && name.startsWith("."));
 }
 
-function sortByName(a, b) {
+function sortByName(a: { name: string }, b: { name: string }) {
   const first = a.name.toLowerCase();
   const second = b.name.toLowerCase();
   return first < second ? -1 : first > second ? 1 : 0;
 }
 
-function within(root, target) {
+function within(root: string, target: string) {
   const relative = path.relative(root, target);
   return !path.isAbsolute(relative) && relative !== ".." && !relative.startsWith(".." + path.sep);
 }
 
 // Match Rust's read_to_string: preserve a leading BOM and reject invalid UTF-8
 // instead of silently saving replacement characters over the original bytes.
-async function readText(file) {
+async function readText(file: string) {
   return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(await fs.readFile(file));
 }
 
-async function scanDirectory(directory, showHidden) {
-  const children = [];
+async function scanDirectory(directory: string, showHidden: boolean): Promise<WorkspaceFileNode[]> {
+  const children: WorkspaceFileNode[] = [];
   const entries = await fs.readdir(directory, { withFileTypes: true });
   for (const entry of entries) {
     if (skipEntry(entry.name, showHidden)) continue;
@@ -56,4 +57,4 @@ async function scanDirectory(directory, showHidden) {
   });
 }
 
-module.exports = { isMarkdown, skipEntry, sortByName, within, readText, scanDirectory };
+export { isMarkdown, skipEntry, sortByName, within, readText, scanDirectory };

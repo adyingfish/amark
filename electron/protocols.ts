@@ -1,6 +1,7 @@
-const fs = require("node:fs/promises");
-const path = require("node:path");
-const { fileURLToPath, pathToFileURL } = require("node:url");
+import type { createWorkspace } from "./workspace.js";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const APP_URL = "amark://app/index.html";
 const IMAGE_TYPES = new Map(
@@ -40,7 +41,7 @@ const PRINT_POLICY = [
   "form-action 'none'",
 ].join("; ");
 
-function launchFilePath(arg, cwd) {
+function launchFilePath(arg: string, cwd: string) {
   // Desktop Entry %U passes file URIs; Windows Explorer and CLI launches use paths.
   if (!/^file:/i.test(arg)) return path.resolve(cwd, arg);
   try {
@@ -50,7 +51,7 @@ function launchFilePath(arg, cwd) {
   }
 }
 
-function rendererURL(devUrl, packaged) {
+function rendererURL(devUrl: string | undefined, packaged: boolean) {
   if (packaged || !devUrl) return APP_URL;
   const url = new URL(devUrl);
   if (
@@ -64,7 +65,7 @@ function rendererURL(devUrl, packaged) {
   return url.href;
 }
 
-function isAppPage(value, entry) {
+function isAppPage(value: string, entry: string) {
   try {
     const url = new URL(value);
     const app = new URL(entry);
@@ -80,7 +81,21 @@ function isAppPage(value, entry) {
   }
 }
 
-function registerProtocols({ protocol, net, dist, assets, printJobs, entry }) {
+function registerProtocols({
+  protocol,
+  net,
+  dist,
+  assets,
+  printJobs,
+  entry,
+}: {
+  protocol: Electron.Protocol;
+  net: Electron.Net;
+  dist: string;
+  assets: Map<string, ReturnType<typeof createWorkspace>>;
+  printJobs: Map<string, string>;
+  entry: string;
+}) {
   protocol.handle("amark", async (request) => {
     try {
       const url = new URL(request.url);
@@ -137,4 +152,4 @@ function registerProtocols({ protocol, net, dist, assets, printJobs, entry }) {
   });
 }
 
-module.exports = { isAppPage, launchFilePath, registerProtocols, rendererURL };
+export { isAppPage, launchFilePath, registerProtocols, rendererURL };

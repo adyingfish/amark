@@ -5,12 +5,11 @@ directories:
   buildResources: resources/icons
 files:
   - dist/**/*
-  - electron/**/*.cjs
-  - "!electron/**/*.test.cjs"
+  - dist-electron/*.js
   - resources/icons/icon.png
 asarUnpack:
-  - electron/workspace-search.cjs
-  - electron/workspace-files.cjs
+  - dist-electron/workspace-search.js
+  - dist-electron/workspace-files.js
 npmRebuild: false
 win:
   target: nsis

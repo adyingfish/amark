@@ -37,7 +37,7 @@ jobs:
         with:
           node-version: 24
       - run: bun install --frozen-lockfile
-      - run: node --test electron/*.test.cjs
+      - run: bun run desktop:test
       - run: bun run vp build
       - run: bun run electron-builder ${{ matrix.args }} --publish never
       - name: Check out the old Windows installer source

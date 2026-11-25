@@ -5,14 +5,15 @@
   "description": "Local Markdown workspace for reading and editing agent output",
   "homepage": "https://github.com/adyingfish/amark",
   "author": "AMark contributors",
-  "main": "electron/main.cjs",
+  "main": "dist-electron/main.js",
   "scripts": {
     "prepare": "lefthook install",
-    "desktop:dev": "node build/desktop-dev.mjs",
-    "desktop:start": "electron .",
-    "desktop:pack": "vp build && electron-builder --dir",
-    "desktop:dist": "vp build && electron-builder",
-    "desktop:test": "node --test electron/*.test.cjs"
+    "desktop:dev": "vp run desktop:build && node build/desktop-dev.mjs",
+    "desktop:start": "vp run desktop:build && electron .",
+    "desktop:pack": "vp run desktop:build && vp build && electron-builder --dir",
+    "desktop:dist": "vp run desktop:build && vp build && electron-builder",
+    "desktop:test": "vp run desktop:build && node --test electron/*.test.cjs",
+    "desktop:build": "tsc -p tsconfig.electron.json"
   },
   "dependencies": {
     "chokidar": "4.0.3"
@@ -23,6 +24,7 @@
     "@tailwindcss/vite": "^4.3.1",
     "@types/jsdom": "^28.0.3",
     "@types/mdast": "^4.0.4",
+    "@types/node": "^24.19.4",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",

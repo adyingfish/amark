@@ -20,7 +20,7 @@ export default defineConfig({
     port: 1420,
     strictPort: true,
     watch: {
-      ignored: ["**/electron/**", "**/release/**", "**/local/**"],
+      ignored: ["**/electron/**", "**/dist-electron/**", "**/release/**", "**/local/**"],
     },
   },
   build: { target: "chrome150" },

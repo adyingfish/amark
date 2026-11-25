@@ -1,13 +1,20 @@
-const fs = require("node:fs/promises");
-const path = require("node:path");
-const { parentPort, workerData } = require("node:worker_threads");
-const { isMarkdown, skipEntry, sortByName, readText } = require("./workspace-files.cjs");
+import type { Commands, WorkspaceSearchResult } from "../shared/desktop";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import { parentPort, workerData } from "node:worker_threads";
+import { isMarkdown, skipEntry, sortByName, readText } from "./workspace-files.js";
 
 const MAX_PER_FILE = 50;
 const MAX_TOTAL = 500;
 const CONTEXT = 50;
 
-function findMatches(file, content, query, caseSensitive, result) {
+function findMatches(
+  file: string,
+  content: string,
+  query: string,
+  caseSensitive: boolean,
+  result: WorkspaceSearchResult,
+) {
   const length = Array.from(query).length;
   const needle = caseSensitive ? query : query.toLowerCase();
   let count = 0;
@@ -61,15 +68,21 @@ function findMatches(file, content, query, caseSensitive, result) {
   }
 }
 
-async function searchWorkspace({ rootPath, query, caseSensitive, showHidden, overrides }) {
-  const result = { matches: [], truncated: false };
+async function searchWorkspace({
+  rootPath,
+  query,
+  caseSensitive,
+  showHidden,
+  overrides,
+}: Commands["search_workspace"]["args"]) {
+  const result: WorkspaceSearchResult = { matches: [], truncated: false };
   if (!query) return result;
-  const pathKey = (file) => (process.platform === "win32" ? file.toLowerCase() : file);
+  const pathKey = (file: string) => (process.platform === "win32" ? file.toLowerCase() : file);
   const dirty = new Map(
     overrides.map(({ path: file, content }) => [pathKey(path.resolve(file)), content]),
   );
 
-  async function visit(directory) {
+  async function visit(directory: string) {
     const entries = await fs.readdir(directory, { withFileTypes: true }).catch(() => []);
     for (const entry of entries.sort(sortByName)) {
       if (skipEntry(entry.name, showHidden)) continue;
@@ -87,4 +100,4 @@ async function searchWorkspace({ rootPath, query, caseSensitive, showHidden, ove
   return result;
 }
 
-searchWorkspace(workerData).then((result) => parentPort.postMessage(result));
+searchWorkspace(workerData).then((result) => parentPort!.postMessage(result));

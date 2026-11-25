@@ -4,7 +4,7 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 const { setTimeout: wait } = require("node:timers/promises");
-const { createWorkspace } = require("./workspace.cjs");
+const { createWorkspace } = require("../dist-electron/workspace.js");
 
 async function fixture(t) {
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "amark-workspace-"));

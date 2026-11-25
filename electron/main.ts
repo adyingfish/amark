@@ -1,4 +1,5 @@
-const {
+import type { Commands, DesktopEvents, MenuEvent, Reply } from "../shared/desktop";
+import {
   app,
   BrowserWindow,
   dialog,
@@ -9,26 +10,43 @@ const {
   screen,
   session,
   shell,
-} = require("electron");
-const { randomUUID } = require("node:crypto");
-const fs = require("node:fs");
-const fsp = require("node:fs/promises");
-const path = require("node:path");
-const { createWorkspace } = require("./workspace.cjs");
-const { isAppPage, launchFilePath, registerProtocols, rendererURL } = require("./protocols.cjs");
-const {
+} from "electron";
+import { randomUUID } from "node:crypto";
+import * as fs from "node:fs";
+import * as fsp from "node:fs/promises";
+import * as path from "node:path";
+import { createWorkspace, WorkspaceError, type WorkspaceHandlers } from "./workspace.js";
+import { isAppPage, launchFilePath, registerProtocols, rendererURL } from "./protocols.js";
+import {
   readWindowStates,
   saveWindowState,
   restoreBounds,
   loadLegacyPreferences,
-} = require("./preferences.cjs");
+} from "./preferences.js";
+
+type Workspace = ReturnType<typeof createWorkspace>;
+interface WindowState {
+  win: BrowserWindow;
+  ws: Workspace;
+  label: number;
+  launch: Commands["take_launch_files"]["returns"];
+  closeListener: boolean;
+  approved: boolean;
+}
+type ShellCommand = Exclude<keyof Commands, keyof Workspace["commands"]>;
+type ShellHandlers = {
+  [K in ShellCommand]: (
+    state: WindowState,
+    args: Commands[K]["args"],
+  ) => Commands[K]["returns"] | Promise<Commands[K]["returns"]>;
+};
 
 const entry = rendererURL(process.env.AMARK_DEV_URL, app.isPackaged);
-const windows = new Map();
-const assets = new Map();
-const printJobs = new Map();
-const earlyFiles = [];
-let windowStates;
+const windows = new Map<number, WindowState>();
+const assets = new Map<string, Workspace>();
+const printJobs = new Map<string, string>();
+const earlyFiles: string[] = [];
+let windowStates: ReturnType<typeof readWindowStates>;
 let legacyPreferences = {};
 let initialized = false;
 let quitting = false;
@@ -41,7 +59,7 @@ protocol.registerSchemesAsPrivileged(
 );
 const themeDirectory = () => path.join(app.getPath("home"), ".amark", "themes");
 const markdownFilters = [{ name: "Markdown", extensions: ["md", "markdown", "mdown", "mkd"] }];
-const menuEvents = new Set([
+const menuEvents = new Set<MenuEvent>([
   "menu-open",
   "menu-open-folder",
   "menu-open-folder-path",
@@ -55,7 +73,7 @@ const menuEvents = new Set([
   "view-toggle-hidden-files",
 ]);
 const themes = new Set(["light", "dark", "literary", "reading", "newsprint", "academic"]);
-const edits = new Map([
+const edits = new Map<string, "undo" | "redo" | "cut" | "copy" | "paste" | "selectAll">([
   ["edit-undo", "undo"],
   ["edit-redo", "redo"],
   ["edit-cut", "cut"],
@@ -64,16 +82,20 @@ const edits = new Map([
   ["edit-select-all", "selectAll"],
 ]);
 
-function emit(win, name, payload) {
-  if (!win.isDestroyed()) win.webContents.send("amark:event:" + name, payload);
+function emit<K extends keyof DesktopEvents>(
+  win: BrowserWindow,
+  name: K,
+  ...payload: DesktopEvents[K] extends void ? [] : [DesktopEvents[K]]
+) {
+  if (!win.isDestroyed()) win.webContents.send("amark:event:" + name, ...payload);
 }
-function lockNavigation(contents) {
+function lockNavigation(contents: Electron.WebContents) {
   contents.setWindowOpenHandler(() => ({ action: "deny" }));
   contents.on("will-navigate", (event) => event.preventDefault());
   contents.on("will-redirect", (event) => event.preventDefault());
   contents.on("will-attach-webview", (event) => event.preventDefault());
 }
-function client(event) {
+function client(event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent) {
   const owner = windows.get(event.sender.id);
   return owner &&
     event.senderFrame &&
@@ -82,12 +104,12 @@ function client(event) {
     ? owner
     : null;
 }
-function parseFiles(argv, cwd) {
+function parseFiles(argv: string[], cwd: string) {
   return argv
     .slice(process.defaultApp ? 2 : 1)
     .filter((arg) => !arg.startsWith("-"))
     .map((arg) => launchFilePath(arg, cwd))
-    .filter((file) => {
+    .filter((file): file is string => {
       try {
         return file !== null && fs.statSync(file).isFile();
       } catch {
@@ -102,7 +124,7 @@ function newLabel() {
   return i;
 }
 
-async function createWindow(files = []) {
+async function createWindow(files: string[] = []) {
   const token = randomUUID();
   const label = newLabel();
   const bounds = windowStates[String(label)];
@@ -116,7 +138,7 @@ async function createWindow(files = []) {
     backgroundColor: "#faf9f5",
     icon: path.join(app.getAppPath(), "resources", "icons", "icon.png"),
     webPreferences: {
-      preload: path.join(__dirname, "preload.cjs"),
+      preload: path.join(__dirname, "preload.js"),
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
@@ -130,7 +152,7 @@ async function createWindow(files = []) {
   });
   const id = win.webContents.id;
   const ws = createWorkspace((name, payload) => emit(win, name, payload));
-  const state = { win, ws, label, launch: [], closeListener: false, approved: false };
+  const state: WindowState = { win, ws, label, launch: [], closeListener: false, approved: false };
   assets.set(token, ws);
   windows.set(id, state);
   lockNavigation(win.webContents);
@@ -150,9 +172,10 @@ async function createWindow(files = []) {
     assets.delete(token);
     windows.delete(id);
   });
-  for (const name of ["resize", "maximize", "unmaximize"]) {
-    win.on(name, () => emit(win, "window-resized"));
-  }
+  const notifyResize = () => emit(win, "window-resized");
+  win.on("resize", notifyResize);
+  win.on("maximize", notifyResize);
+  win.on("unmaximize", notifyResize);
   win.once("ready-to-show", () => {
     if (bounds?.maximized) win.maximize();
     if (bounds?.fullscreen) win.setFullScreen(true);
@@ -166,7 +189,7 @@ async function createWindow(files = []) {
         if (state.launch.length === 0) await ws.grantRoot(dir);
         state.launch.push({ path: canonical, dir });
       } catch (error) {
-        console.warn("Could not open launch file", file, error.message);
+        console.warn("Could not open launch file", file, String(error));
       }
     }
     await win.loadURL(entry);
@@ -176,13 +199,13 @@ async function createWindow(files = []) {
   }
 }
 
-function openNewWindow(files) {
+function openNewWindow(files: string[]) {
   createWindow(files).catch((error) => {
     console.error("Could not open AMark window", error);
     dialog.showErrorBox("AMark", String(error.message));
   });
 }
-function themeFilename(fileName) {
+function themeFilename(fileName: string) {
   if (
     typeof fileName !== "string" ||
     /[/\\:]/.test(fileName) ||
@@ -193,15 +216,15 @@ function themeFilename(fileName) {
   }
   return path.join(themeDirectory(), fileName);
 }
-async function themeCSS(fileName) {
+async function themeCSS(fileName: string) {
   const file = themeFilename(fileName);
   const stat = await fsp.lstat(file).catch(() => null);
   return stat?.isFile() ? fsp.readFile(file, "utf8") : null;
 }
-async function menuAction(win, id) {
+async function menuAction(win: BrowserWindow, id: string) {
   if (id === "new") emit(win, "menu-new");
-  else if (menuEvents.has(id)) emit(win, id);
-  else if (edits.has(id)) win.webContents[edits.get(id)]();
+  else if (menuEvents.has(id as MenuEvent)) emit(win, id as MenuEvent);
+  else if (edits.has(id)) win.webContents[edits.get(id)!]();
   else if (id === "view-fullscreen") win.setFullScreen(!win.isFullScreen());
   else if (id.startsWith("theme-custom:")) {
     const name = id.slice("theme-custom:".length);
@@ -210,7 +233,12 @@ async function menuAction(win, id) {
     emit(win, "set-theme", id.slice(6));
 }
 
-async function exportDocument(state, format, html, title) {
+async function exportDocument(
+  state: WindowState,
+  format: "html" | "pdf",
+  html: string,
+  title: string,
+) {
   if (typeof html !== "string") throw new Error("Invalid export document");
   const stem =
     typeof title === "string" && title.trim()
@@ -256,7 +284,7 @@ async function exportDocument(state, format, html, title) {
   return true;
 }
 
-const commands = {
+const commands: ShellHandlers = {
   home_dir: () => app.getPath("home"),
   take_launch_files: (state) => state.launch.splice(0),
   menu_action: (state, { id }) => menuAction(state.win, id),
@@ -363,27 +391,46 @@ const commands = {
   export_pdf: (state, { html, title }) => exportDocument(state, "pdf", html, title),
 };
 
-ipcMain.handle("amark:command", async (event, command, args) => {
-  try {
-    const state = client(event);
-    if (!state || typeof command !== "string" || !args || typeof args !== "object")
-      throw new Error("Invalid desktop request");
-    let value;
-    if (Object.hasOwn(commands, command)) value = await commands[command](state, args);
-    else if (Object.hasOwn(state.ws.commands, command))
-      value = await state.ws.commands[command](args);
-    else throw new Error("Unknown desktop command");
-    return { ok: true, value };
-  } catch (error) {
-    if (typeof error.code === "string" && /^[A-Z][a-z]/.test(error.code)) {
-      return {
-        ok: false,
-        error: { code: error.code, name: error.name, kind: error.kind, reason: error.reason },
-      };
+function hasCommand<T extends object>(handlers: T, name: string): name is Extract<keyof T, string> {
+  return Object.hasOwn(handlers, name);
+}
+// Electron deserializes arguments at the IPC boundary. Commands keep their own
+// runtime filesystem and permission checks; both sides share the wire types.
+function dispatchShell<K extends ShellCommand>(state: WindowState, name: K, args: unknown) {
+  return commands[name](state, args as Commands[K]["args"]);
+}
+function dispatchWorkspace<K extends keyof Workspace["commands"]>(
+  ws: Workspace,
+  name: K,
+  args: unknown,
+) {
+  const handlers: Pick<WorkspaceHandlers, keyof Workspace["commands"]> = ws.commands;
+  return handlers[name](args as Commands[K]["args"]);
+}
+ipcMain.handle(
+  "amark:command",
+  async (event, command: string, args: unknown): Promise<Reply<unknown>> => {
+    try {
+      const state = client(event);
+      if (!state || typeof command !== "string" || !args || typeof args !== "object")
+        throw new Error("Invalid desktop request");
+      let value;
+      if (hasCommand(commands, command)) value = await dispatchShell(state, command, args);
+      else if (hasCommand(state.ws.commands, command))
+        value = await dispatchWorkspace(state.ws, command, args);
+      else throw new Error("Unknown desktop command");
+      return { ok: true, value };
+    } catch (error) {
+      if (error instanceof WorkspaceError) {
+        return {
+          ok: false,
+          error: { code: error.code, name: error.name, kind: error.kind, reason: error.reason },
+        };
+      }
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
-    return { ok: false, error: String(error.message ?? error) };
-  }
-});
+  },
+);
 ipcMain.on("amark:close-listener", (event, enabled) => {
   const state = client(event);
   if (state) state.closeListener = enabled === true;
