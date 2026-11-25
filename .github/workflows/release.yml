@@ -1,6 +1,11 @@
 name: Release
 on:
   workflow_dispatch:
+    inputs:
+      test_windows_upgrade:
+        type: boolean
+        description: Test a fresh installation and an upgrade from Tauri 0.1.1
+        default: false
 
 jobs:
   package:
@@ -35,6 +40,26 @@ jobs:
       - run: node --test electron/*.test.cjs
       - run: bun run vp build
       - run: bun run electron-builder ${{ matrix.args }} --publish never
+      - name: Check out the old Windows installer source
+        if: runner.os == 'Windows' && inputs.test_windows_upgrade
+        uses: actions/checkout@v7
+        with:
+          ref: 8db599e9a0f3b3961b14e5e1beced8e6dac80263
+          path: previous-amark
+      - name: Build the Tauri 0.1.1 baseline
+        if: runner.os == 'Windows' && inputs.test_windows_upgrade
+        working-directory: previous-amark
+        run: |
+          bun install --frozen-lockfile
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          bun run tauri build
+      - name: Check Windows installation and upgrade
+        if: runner.os == 'Windows' && inputs.test_windows_upgrade
+        shell: pwsh
+        run: |
+          $current = (Get-Item release/*-x64-setup.exe).FullName
+          $previous = (Get-Item previous-amark/src-tauri/target/release/bundle/nsis/*_x64-setup.exe).FullName
+          ./build/test-windows-upgrade.ps1 -InstallerPath $current -PreviousInstallerPath $previous
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}

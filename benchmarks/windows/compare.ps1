@@ -24,6 +24,8 @@ function Write-Revision([int]$Revision) {
     [IO.File]::WriteAllText($active, "$content`n`nAMARK-SOAK-$Revision`n", [Text.UTF8Encoding]::new($false))
 }
 Write-Revision 0
+Add-Type -Path (Join-Path $PSScriptRoot 'BenchmarkDesktop.cs')
+$desktop = [BenchmarkDesktop]::new()
 $apps = [ordered]@{}
 $ports = @{}
 function Get-FreePort {
@@ -33,7 +35,11 @@ function Get-FreePort {
 }
 function Check-Window($Engine, $Action, $ArgValue) {
     $result = & node (Join-Path $PSScriptRoot 'observe.mjs') $ports[$Engine] $Action $ArgValue
-    if ($LASTEXITCODE -ne 0) { throw "$Engine failed UI check $Action" }
+    if ($LASTEXITCODE -ne 0) {
+        $proc=$apps[$Engine]
+        $proc.Refresh()
+        throw "$Engine failed UI check $Action PID $($proc.Id), exited=$($proc.HasExited), port=$($ports[$Engine])"
+    }
     return ($result | ConvertFrom-Json)
 }
 function Measure-Trees {
@@ -75,10 +81,10 @@ try {
         if ($engine -eq 'Tauri') {
             $env:WEBVIEW2_USER_DATA_FOLDER = $profile
             $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = $flags -join ' '
-            $apps[$engine] = Start-Process -FilePath $tauriPath -ArgumentList @('"' + $active + '"') -WorkingDirectory $output -PassThru -WindowStyle Hidden
+            $apps[$engine] = $desktop.Start($tauriPath, ('"' + $active + '"'), $output)
         } else {
             $argsList = $flags + @(('--user-data-dir="' + $profile + '"'), ('"' + $active + '"'))
-            $apps[$engine] = Start-Process -FilePath $electronPath -ArgumentList $argsList -WorkingDirectory $output -PassThru -WindowStyle Hidden
+            $apps[$engine] = $desktop.Start($electronPath, ($argsList -join ' '), $output)
         }
         $v = Check-Window $engine maximize 0
         Write-Output "$engine maximized: $($v.width)x$($v.height)"
@@ -134,4 +140,5 @@ try {
     foreach ($p in $apps.Values) {
         if (!$p.HasExited) { [void]$p.CloseMainWindow(); if (!$p.WaitForExit(4000)) { $p.Kill($true) } }
     }
+    $desktop.Dispose()
 }

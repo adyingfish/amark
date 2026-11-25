@@ -12,16 +12,17 @@ asarUnpack:
   - electron/workspace-search.cjs
   - electron/workspace-files.cjs
 npmRebuild: false
-fileAssociations:
-  - ext: [md, markdown, mdown, mkd]
-    name: AMark.Markdown
-    description: Markdown Document
-    role: Editor
-    mimeType: text/markdown
 win:
   target: nsis
   icon: resources/icons/icon.ico
+  fileAssociations: &markdownAssociations
+    - ext: [md, markdown, mdown, mkd]
+      name: AMark.Markdown
+      description: Markdown Document
+      role: Editor
+      mimeType: text/markdown
 nsis:
+  include: build/installer.nsh
   # The Tauri installer registered this exact per-user uninstall key.
   guid: AMark
   oneClick: false
@@ -32,9 +33,16 @@ mac:
   target: dmg
   category: public.app-category.productivity
   icon: resources/icons/icon.icns
+  fileAssociations: *markdownAssociations
 linux:
   syncDesktopName: true
   target: deb
   category: Office
   icon: resources/icons/icon.png
   maintainer: adyingfish <adyingfish@users.noreply.github.com>
+  # electron-builder emits one freedesktop MIME glob per association.
+  fileAssociations:
+    - { ext: md, mimeType: text/markdown }
+    - { ext: markdown, mimeType: text/markdown }
+    - { ext: mdown, mimeType: text/markdown }
+    - { ext: mkd, mimeType: text/markdown }
